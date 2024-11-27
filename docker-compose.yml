@@ -1,0 +1,9 @@
+version: '3'
+services:
+  web-notepad:
+    image: lissettecarlr/web-notepad:latest
+    ports:
+      - "12345:12345"
+    volumes:
+      - ./notes:/app/notes
+    restart: always 

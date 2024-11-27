@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html data-theme="light">
+<head>
+    <title>在线记事本</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.7.0/styles/github.css">
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.7.0/lib/highlight.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>在线记事本</h1>
+            <div class="header-buttons">
+                <button id="preview-toggle" class="control-btn">预览</button>
+                <button id="theme-toggle" class="theme-btn">
+                    <span class="light-icon">🌞</span>
+                    <span class="dark-icon">🌙</span>
+                </button>
+            </div>
+        </div>
+        <div class="content-area">
+            <div class="tabs">
+                <button class="tab-btn active" data-notebook="notebook1">笔记本1</button>
+                <button class="tab-btn" data-notebook="notebook2">笔记本2</button>
+                <button class="tab-btn" data-notebook="notebook3">笔记本3</button>
+            </div>
+            <div class="editor-container">
+                <textarea id="notepad" placeholder="在这里输入Markdown内容..."></textarea>
+                <div id="preview" class="markdown-preview"></div>
+            </div>
+            <div id="status"></div>
+        </div>
+    </div>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html> 
