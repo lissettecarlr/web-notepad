@@ -26,6 +26,9 @@ function loadNotebook(notebook) {
         .then(data => {
             if (data.status === 'success') {
                 notepad.value = data.content;
+                if (isPreviewMode) {
+                    updatePreview();
+                }
             } else {
                 status.textContent = '加载失败：' + data.message;
             }
@@ -107,6 +110,9 @@ marked.setOptions({
 function updatePreview() {
     const content = notepad.value;
     preview.innerHTML = marked.parse(content);
+    document.querySelectorAll('pre code').forEach((block) => {
+        hljs.highlightBlock(block);
+    });
 }
 
 previewToggle.addEventListener('click', () => {
