@@ -20,7 +20,17 @@ themeToggle.addEventListener('click', () => {
     localStorage.setItem('theme', newTheme);
 });
 
+// 添加一个加载状态标志
+let isLoading = false;
+
+// 添加一个变量来追踪保存时的笔记本
+let savingNotebook = null;
+
 function loadNotebook(notebook) {
+    // 设置加载状态为true
+    isLoading = true;
+    status.textContent = '正在加载...';
+    
     fetch(`/load/${notebook}`)
         .then(response => response.json())
         .then(data => {
@@ -29,16 +39,28 @@ function loadNotebook(notebook) {
                 if (isPreviewMode) {
                     updatePreview();
                 }
+                status.textContent = '加载完成';
             } else {
                 status.textContent = '加载失败：' + data.message;
             }
         })
         .catch(error => {
             status.textContent = '加载出错：' + error;
+        })
+        .finally(() => {
+            // 加载完成后，无论成功失败，都将加载状态设为false
+            isLoading = false;
         });
 }
 
 function autoSave() {
+    // 如果正在加载中，不执行保存操作
+    if (isLoading) {
+        return;
+    }
+    
+    // 记录开始保存时的笔记本
+    savingNotebook = currentNotebook;
     const content = notepad.value;
     
     fetch('/save', {
@@ -48,11 +70,17 @@ function autoSave() {
         },
         body: JSON.stringify({
             content: content,
-            notebook: currentNotebook
+            notebook: savingNotebook
         })
     })
     .then(response => response.json())
     .then(data => {
+        // 检查当前笔记本是否仍然是开始保存时的笔记本
+        if (savingNotebook !== currentNotebook) {
+            console.log('笔记本已切换，取消保存操作');
+            return;
+        }
+        
         if (data.status === 'success') {
             status.textContent = '已自动保存 - ' + new Date().toLocaleTimeString();
         } else {
@@ -60,15 +88,26 @@ function autoSave() {
         }
     })
     .catch(error => {
+        // 检查当前笔记本是否仍然是开始保存时的笔记本
+        if (savingNotebook !== currentNotebook) {
+            console.log('笔记本已切换，取消保存操作');
+            return;
+        }
         status.textContent = '保存出错：' + error;
+    })
+    .finally(() => {
+        savingNotebook = null;
     });
 }
 
 // 标签切换事件
 tabButtons.forEach(button => {
     button.addEventListener('click', () => {
-        // 保存当前笔记本
-        autoSave();
+        // 如果之前的定时器存在，清除它
+        if (timer) {
+            clearTimeout(timer);
+            timer = null;
+        }
         
         // 更新标签样式
         tabButtons.forEach(btn => btn.classList.remove('active'));
@@ -119,17 +158,25 @@ previewToggle.addEventListener('click', () => {
     isPreviewMode = !isPreviewMode;
     editorContainer.classList.toggle('preview-mode');
     previewToggle.textContent = isPreviewMode ? '编辑' : '预览';
+    
+    // 如果进入预览模式，清除现有的定时器
     if (isPreviewMode) {
         updatePreview();
+        if (timer) {
+            clearTimeout(timer);
+            timer = null;
+        }
     }
 });
 
-// 在输入时更新预览
+// 修改输入事件处理
 notepad.addEventListener('input', () => {
     if (isPreviewMode) {
         updatePreview();
+        return; // 预览模式下不启动自动保存
     }
-    // 保持原有的自动保存功能
+    
+    // 只在编辑模式下执行自动保存
     if (timer) {
         clearTimeout(timer);
     }
