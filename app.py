@@ -38,5 +38,11 @@ def save_note():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)})
 
+from flask import send_from_directory
+@app.route('/favicon.ico')
+def favicon():
+    return send_from_directory(os.path.join(app.root_path, 'static'),
+                             'favicon.ico', mimetype='./images/favicon.ico')
+
 if __name__ == '__main__':
     app.run(debug=True, port=12345, host='0.0.0.0')

@@ -1,7 +1,7 @@
 let timer = null;
 let currentNotebook = 'notebook1';
 const notepad = document.getElementById('notepad');
-const status = document.getElementById('status');
+const status_show = document.getElementById('status');
 const tabButtons = document.querySelectorAll('.tab-btn');
 
 // 主题切换功能
@@ -29,7 +29,7 @@ let savingNotebook = null;
 function loadNotebook(notebook) {
     // 设置加载状态为true
     isLoading = true;
-    status.textContent = '正在加载...';
+    status_show.textContent = '正在加载...';
     
     fetch(`/load/${notebook}`)
         .then(response => response.json())
@@ -39,13 +39,13 @@ function loadNotebook(notebook) {
                 if (isPreviewMode) {
                     updatePreview();
                 }
-                status.textContent = '加载完成';
+                status_show.textContent = '加载完成';
             } else {
-                status.textContent = '加载失败：' + data.message;
+                status_show.textContent = '加载失败：' + data.message;
             }
         })
         .catch(error => {
-            status.textContent = '加载出错：' + error;
+            status_show.textContent = '加载出错：' + error;
         })
         .finally(() => {
             // 加载完成后，无论成功失败，都将加载状态设为false
@@ -82,9 +82,9 @@ function autoSave() {
         }
         
         if (data.status === 'success') {
-            status.textContent = '已自动保存 - ' + new Date().toLocaleTimeString();
+            status_show.textContent = '已自动保存 - ' + new Date().toLocaleTimeString();
         } else {
-            status.textContent = '保存失败：' + data.message;
+            status_show.textContent = '保存失败：' + data.message;
         }
     })
     .catch(error => {
@@ -93,7 +93,7 @@ function autoSave() {
             console.log('笔记本已切换，取消保存操作');
             return;
         }
-        status.textContent = '保存出错：' + error;
+        status_show.textContent = '保存出错：' + error;
     })
     .finally(() => {
         savingNotebook = null;
