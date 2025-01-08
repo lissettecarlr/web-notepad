@@ -14,6 +14,16 @@
             <h1>在线记事本</h1>
             <div class="header-buttons">
                 <button id="preview-toggle" class="control-btn">预览</button>
+                <div class="file-menu">
+                    <button id="file-btn" class="control-btn">📎</button>
+                    <div class="file-dropdown">
+                        <label class="menu-item file-upload-label">⏫
+                            <input type="file" id="file-upload" style="display:none">
+                        </label>
+                        <button class="menu-item" id="file-download">⏬</button>
+                        <button class="menu-item" id="file-clear">🗑️</button>
+                    </div>
+                </div>
                 <button id="theme-toggle" class="theme-btn">
                     <span class="light-icon">🌞</span>
                     <span class="dark-icon">🌙</span>

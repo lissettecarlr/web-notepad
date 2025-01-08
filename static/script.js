@@ -182,3 +182,52 @@ notepad.addEventListener('input', () => {
     }
     timer = setTimeout(autoSave, 2000);
 }); 
+
+// 文件操作相关代码
+document.getElementById('file-upload').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    try {
+        const response = await fetch('/upload', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const data = await response.json();
+        if (data.status === 'success') {
+            const {name, size, type} = data.fileInfo;
+            status_show.textContent = `文件上传成功 - ${name} (${size}, ${type})`;
+        } else {
+            status_show.textContent = '上传失败：' + data.message;
+        }
+    } catch (error) {
+        console.error('Upload error:', error);
+        status_show.textContent = '上传出错：' + error.message;
+    }
+});
+
+document.getElementById('file-download').addEventListener('click', async () => {
+    try {
+        window.location.href = '/download';
+    } catch (error) {
+        status_show.textContent = '下载出错：' + error;
+    }
+});
+
+document.getElementById('file-clear').addEventListener('click', async () => {
+    try {
+        const response = await fetch('/clear-file');
+        const data = await response.json();
+        if (data.status === 'success') {
+            status_show.textContent = '文件已清除';
+        } else {
+            status_show.textContent = '清除失败：' + data.message;
+        }
+    } catch (error) {
+        status_show.textContent = '清除出错：' + error;
+    }
+});
