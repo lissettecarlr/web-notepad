@@ -16,7 +16,10 @@ if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 
 ALLOWED_EXTENSIONS = {'doc','docx','pdf','apk','rar','zip'}
-MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
+MAX_FILE_SIZE = 100 * 1024 * 1024  # 50MB
+
+# 添加密码常量
+UPLOAD_PASSWORD = os.environ.get('UPLOAD_PASSWORD', '1234')  # 优先使用环境变量，否则使用默认密码
 
 @app.route('/')
 def index():
@@ -51,6 +54,11 @@ def save_note():
 @limiter.limit("10/minute")
 @app.route('/upload', methods=['POST'])
 def upload_file():
+    # 验证密码
+    password = request.form.get('password')
+    if password != UPLOAD_PASSWORD:
+        return jsonify({"status": "error", "message": "密码错误"})
+        
     if 'file' not in request.files:
         return jsonify({"status": "error", "message": "没有选择文件"})
         
@@ -118,5 +126,13 @@ def favicon():
     return send_from_directory(os.path.join(app.root_path, 'static'),
                              'favicon.ico', mimetype='./images/favicon.ico')
                             
+@app.route('/check-file')
+def check_file():
+    files = os.listdir(UPLOAD_FOLDER)
+    return jsonify({
+        "status": "success",
+        "hasFile": len(files) > 0
+    })
+
 if __name__ == '__main__':
     app.run(debug=True, port=12345, host='0.0.0.0')

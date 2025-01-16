@@ -4,6 +4,8 @@ services:
     image: lissettecarlr/web-notepad:latest
     ports:
       - "12345:12345"
+    environment:
+      - UPLOAD_PASSWORD=1234
     volumes:
       - ./notes:/app/notes
     restart: always 

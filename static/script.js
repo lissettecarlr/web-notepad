@@ -188,8 +188,16 @@ document.getElementById('file-upload').addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     
+    // 弹出密码输入框
+    const password = prompt('请输入上传密码：');
+    if (!password) {
+        status_show.textContent = '已取消上传';
+        return;
+    }
+    
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('password', password);  // 添加密码到表单数据
     
     try {
         const response = await fetch('/upload', {
@@ -201,6 +209,7 @@ document.getElementById('file-upload').addEventListener('change', async (e) => {
         if (data.status === 'success') {
             const {name, size, type} = data.fileInfo;
             status_show.textContent = `文件上传成功 - ${name} (${size}, ${type})`;
+            await updateFileButtons(); // 更新按钮状态
         } else {
             status_show.textContent = '上传失败：' + data.message;
         }
@@ -224,6 +233,7 @@ document.getElementById('file-clear').addEventListener('click', async () => {
         const data = await response.json();
         if (data.status === 'success') {
             status_show.textContent = '文件已清除';
+            await updateFileButtons(); // 更新按钮状态
         } else {
             status_show.textContent = '清除失败：' + data.message;
         }
@@ -231,3 +241,27 @@ document.getElementById('file-clear').addEventListener('click', async () => {
         status_show.textContent = '清除出错：' + error;
     }
 });
+
+// 添加文件状态检查函数
+async function updateFileButtons() {
+    try {
+        const response = await fetch('/check-file');
+        const data = await response.json();
+        
+        const downloadBtn = document.getElementById('file-download');
+        const clearBtn = document.getElementById('file-clear');
+        
+        if (data.hasFile) {
+            downloadBtn.style.display = 'block';
+            clearBtn.style.display = 'block';
+        } else {
+            downloadBtn.style.display = 'none';
+            clearBtn.style.display = 'none';
+        }
+    } catch (error) {
+        console.error('检查文件状态失败:', error);
+    }
+}
+
+// 页面加载时检查文件状态
+document.addEventListener('DOMContentLoaded', updateFileButtons);
