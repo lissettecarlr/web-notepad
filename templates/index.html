@@ -19,16 +19,24 @@
         <div class="header">
             <h1>在线记事本</h1>
             <div class="header-buttons">
-                <button id="preview-toggle" class="control-btn">预览</button>
-                <div class="file-menu">
-                    <button id="file-btn" class="control-btn">📎</button>
-                    <div class="file-dropdown">
-                        <label class="menu-item file-upload-label">⏫
-                            <input type="file" id="file-upload" style="display:none">
-                        </label>
-                        <button class="menu-item" id="file-download">⏬</button>
-                        <button class="menu-item" id="file-clear">🗑️</button>
-                    </div>
+                <button id="preview-toggle" class="control-btn" title="切换预览模式">
+                    <span class="file-icon">📝</span>
+                    <span class="btn-text">预览</span>
+                </button>
+                <div class="file-actions">
+                    <button id="upload-btn" class="action-btn" title="上传文件">
+                        <span class="file-icon">⬆️</span>
+                        <span class="btn-text">上传</span>
+                    </button>
+                    <button id="download-btn" class="action-btn" title="下载文件">
+                        <span class="file-icon">⬇️</span>
+                        <span class="btn-text">下载</span>
+                    </button>
+                    <button id="clear-btn" class="action-btn" title="清除文件">
+                        <span class="file-icon">🗑️</span>
+                        <span class="btn-text">清除</span>
+                    </button>
+                    <input type="file" id="file-upload" style="display:none">
                 </div>
                 <button id="theme-toggle" class="theme-btn">
                     <span class="light-icon">🌞</span>

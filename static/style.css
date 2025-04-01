@@ -144,23 +144,32 @@ body {
     align-items: center;
 }
 
-.control-btn {
+.control-btn, .action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     padding: 8px 12px;
     border-radius: 4px;
     border: 1px solid var(--textarea-border);
     background: var(--textarea-bg);
     color: var(--text-color);
     cursor: pointer;
-    transition: all 0.3s ease;
+    transition: all 0.2s ease;
+    font-size: 14px;
+    gap: 6px;
     min-width: 40px;
     height: 36px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
 }
 
-.control-btn:hover {
+.control-btn:hover, .action-btn:hover {
     background: var(--tab-hover);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.control-btn:active, .action-btn:active {
+    transform: translateY(0);
+    box-shadow: none;
 }
 
 .editor-container {
@@ -250,50 +259,39 @@ body {
     }
 } 
 
-.file-menu {
-    position: relative;
+/* 文件操作按钮样式 */
+.file-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.file-icon {
+    font-size: 16px;
+}
+
+.btn-text {
     display: inline-block;
 }
 
-.file-dropdown {
-    display: none;
-    position: absolute;
-    right: 0;
-    background: var(--bg-color);
-    border: 1px solid var(--textarea-border);
-    border-radius: 4px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-    z-index: 1000;
+/* 响应式设计中的文件操作按钮 */
+@media (max-width: 768px) {
+    .btn-text {
+        display: none;
+    }
+    
+    .action-btn, .control-btn {
+        padding: 8px;
+    }
+    
+    .file-actions {
+        gap: 4px;
+    }
 }
 
-.file-menu:hover .file-dropdown {
-    display: block;
-}
-
-.menu-item {
-    display: block;
-    padding: 8px 16px;
-    width: 100%;
-    text-align: left;
-    border: none;
-    background: none;
-    color: var(--text-color);
-    cursor: pointer;
-    white-space: nowrap;
-}
-
-.menu-item:hover {
-    background: var(--tab-hover);
-}
-
+/* 删除旧的文件菜单样式 */
+.file-menu,
+.file-dropdown,
+.menu-item,
 .file-upload-label {
-    display: inline-block;
-    width: 50%;
-    background: none;
-    border: none;
-    text-align: left;
-    font: inherit;
-    padding: 5px 15px;
-    margin: 0;
-    cursor: pointer;
+    display: none;
 }

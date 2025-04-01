@@ -157,15 +157,22 @@ function updatePreview() {
 previewToggle.addEventListener('click', () => {
     isPreviewMode = !isPreviewMode;
     editorContainer.classList.toggle('preview-mode');
-    previewToggle.textContent = isPreviewMode ? '编辑' : '预览';
     
-    // 如果进入预览模式，清除现有的定时器
+    // 更新预览按钮的图标和文本
+    const iconElement = previewToggle.querySelector('.file-icon');
+    const textElement = previewToggle.querySelector('.btn-text');
+    
     if (isPreviewMode) {
+        iconElement.textContent = '✏️';
+        textElement.textContent = '编辑';
         updatePreview();
         if (timer) {
             clearTimeout(timer);
             timer = null;
         }
+    } else {
+        iconElement.textContent = '📝';
+        textElement.textContent = '预览';
     }
 });
 
@@ -184,9 +191,20 @@ notepad.addEventListener('input', () => {
 }); 
 
 // 文件操作相关代码
+document.getElementById('upload-btn').addEventListener('click', () => {
+    document.getElementById('file-upload').click();
+});
+
 document.getElementById('file-upload').addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    
+    // 检查文件大小
+    const maxSize = 500 * 1024 * 1024; // 500MB
+    if (file.size > maxSize) {
+        status_show.textContent = `文件过大，最大支持500MB`;
+        return;
+    }
     
     // 弹出密码输入框
     const password = prompt('请输入上传密码：');
@@ -197,29 +215,48 @@ document.getElementById('file-upload').addEventListener('change', async (e) => {
     
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('password', password);  // 添加密码到表单数据
+    formData.append('password', password);
     
     try {
+        status_show.textContent = '正在上传...';
+        
+        // 添加超时控制
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 60000); // 60秒超时
+        
         const response = await fetch('/upload', {
             method: 'POST',
-            body: formData
+            body: formData,
+            signal: controller.signal
         });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+            throw new Error(`服务器返回错误: ${response.status} ${response.statusText}`);
+        }
         
         const data = await response.json();
         if (data.status === 'success') {
             const {name, size, type} = data.fileInfo;
-            status_show.textContent = `文件上传成功 - ${name} (${size}, ${type})`;
-            await updateFileButtons(); // 更新按钮状态
+            status_show.textContent = `✅ 文件上传成功 - ${name} (${size}, ${type})`;
+            await updateFileButtons();
         } else {
-            status_show.textContent = '上传失败：' + data.message;
+            status_show.textContent = `❌ 上传失败：${data.message}`;
         }
     } catch (error) {
         console.error('Upload error:', error);
-        status_show.textContent = '上传出错：' + error.message;
+        if (error.name === 'AbortError') {
+            status_show.textContent = `❌ 上传超时，请稍后重试或尝试小一点的文件`;
+        } else if (error.message.includes('Failed to fetch')) {
+            status_show.textContent = `❌ 连接服务器失败，请检查网络连接`;
+        } else {
+            status_show.textContent = `❌ 上传出错：${error.message}`;
+        }
     }
 });
 
-document.getElementById('file-download').addEventListener('click', async () => {
+document.getElementById('download-btn').addEventListener('click', async () => {
     try {
         window.location.href = '/download';
     } catch (error) {
@@ -227,7 +264,7 @@ document.getElementById('file-download').addEventListener('click', async () => {
     }
 });
 
-document.getElementById('file-clear').addEventListener('click', async () => {
+document.getElementById('clear-btn').addEventListener('click', async () => {
     try {
         const response = await fetch('/clear-file');
         const data = await response.json();
@@ -248,12 +285,12 @@ async function updateFileButtons() {
         const response = await fetch('/check-file');
         const data = await response.json();
         
-        const downloadBtn = document.getElementById('file-download');
-        const clearBtn = document.getElementById('file-clear');
+        const downloadBtn = document.getElementById('download-btn');
+        const clearBtn = document.getElementById('clear-btn');
         
         if (data.hasFile) {
-            downloadBtn.style.display = 'block';
-            clearBtn.style.display = 'block';
+            downloadBtn.style.display = 'inline-flex';
+            clearBtn.style.display = 'inline-flex';
         } else {
             downloadBtn.style.display = 'none';
             clearBtn.style.display = 'none';
