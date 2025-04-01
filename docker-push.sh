@@ -2,7 +2,7 @@
 
 # 配置信息
 IMAGE_NAME="lissettecarlr/web-notepad"
-VERSION="0.1.4"
+VERSION="0.1.5"
 
 # 登录到Docker Hub（首次使用需要）
 echo "正在登录Docker Hub..."
