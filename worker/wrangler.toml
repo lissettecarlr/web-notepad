@@ -8,9 +8,12 @@ compatibility_date = "2024-01-01"
 # 创建后，在 Worker 的 Settings -> Variables -> KV Namespace Bindings 中绑定
 # 或者使用命令：wrangler kv:namespace create "NOTES_KV"
 # 然后将生成的 ID 填入下面的 kv_namespaces
-kv_namespaces = [
-  { binding = "NOTES_KV", id = "YOUR_KV_NAMESPACE_ID" }
-]
+# KV Namespace 需要在 Cloudflare Dashboard 中绑定
+# 部署后，进入 Worker Settings → Bindings → Add → KV Namespace
+# Variable name: NOTES_KV，选择你创建的 KV namespace
+# kv_namespaces = [
+#   { binding = "NOTES_KV", id = "YOUR_KV_NAMESPACE_ID" }
+# ]
 
 
 # 路由配置（可选，如果使用自定义域名）
