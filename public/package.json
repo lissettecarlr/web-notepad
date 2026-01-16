@@ -1,0 +1,6 @@
+{
+  "name": "web-notepad",
+  "version": "1.0.0",
+  "description": "在线记事本 - Cloudflare Pages 版本",
+  "private": true
+}

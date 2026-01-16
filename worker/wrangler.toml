@@ -1,0 +1,19 @@
+name = "notebook-api"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+
+# KV Namespace 绑定
+# 注意：需要先在 Cloudflare Dashboard 创建 KV Namespace，然后替换下面的 ID
+# 创建方法：Workers & Pages -> KV -> Create a namespace
+# 创建后，在 Worker 的 Settings -> Variables -> KV Namespace Bindings 中绑定
+# 或者使用命令：wrangler kv:namespace create "NOTES_KV"
+# 然后将生成的 ID 填入下面的 kv_namespaces
+kv_namespaces = [
+  { binding = "NOTES_KV", id = "YOUR_KV_NAMESPACE_ID" }
+]
+
+
+# 路由配置（可选，如果使用自定义域名）
+# routes = [
+#   { pattern = "api.yourdomain.com/*", zone_name = "yourdomain.com" }
+# ]
