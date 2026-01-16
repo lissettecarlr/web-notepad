@@ -1,8 +1,6 @@
 // Workers API 地址配置
-// 部署后，将 YOUR_WORKER_NAME 替换为你的 Worker 名称
-// 例如：https://notebook-api.your-account.workers.dev
-// 或者使用自定义域名：https://api.yourdomain.com
-const API_BASE_URL = 'https://YOUR_WORKER_NAME.workers.dev';
+// 部署时通过 Cloudflare Pages 环境变量 API_BASE_URL 注入
+const API_BASE_URL = '__API_BASE_URL__';
 
 let timer = null;
 let currentNotebook = 'notebook1';

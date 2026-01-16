@@ -1,81 +1,72 @@
-# 在线笔记本 Web Notepad
+# 在线笔记本 Web Notepad (Cloudflare 版)
 
-一个简单好用的在线web笔记本，用于快速记录和保存临时信息。
+一个简单好用的在线 web 笔记本，部署在 Cloudflare 上实现跨设备同步。
 
-## ✨ 功能特性
+## 功能特性
 
-- **三页笔记本** - 提供三个独立的笔记页面，方便分类记录不同内容
-- **自动保存** - 停止编辑2秒后自动保存内容，无需手动操作
-- **Markdown支持** - 内置Markdown编辑和预览功能，支持代码高亮
+- **三页笔记本** - 提供三个独立的笔记页面，方便分类记录
+- **自动保存** - 停止编辑 2 秒后自动保存，无需手动操作
+- **Markdown 支持** - 内置 Markdown 编辑和预览功能，支持代码高亮
 - **主题切换** - 支持浅色/深色主题自由切换
-- **文件缓存** - 支持临时存储一个不超过500MB的文件
-- **安全保护** - 文件上传需要密码验证（默认：1234，可通过环境变量修改）
+- **跨设备同步** - 数据存储在 Cloudflare KV，随时随地访问
 
-![边界效果展示](./images/2.gif)
+## 架构
 
-![上传效果展示](./images/3.gif)
+- **Cloudflare Pages** - 托管前端静态文件
+- **Cloudflare Workers** - 提供 API 后端
+- **Cloudflare KV** - 存储笔记数据
 
-## 🚀 快速开始
+## 快速部署
 
-### 本地部署
+### 1. Fork 本仓库
 
-```bash
-# 克隆仓库
-git clone https://github.com/lissettecarlr/web-notepad.git
+### 2. 创建 KV Namespace
 
-# 进入项目目录
-cd web-notepad
+1. 登录 [Cloudflare Dashboard](https://dash.cloudflare.com/)
+2. **Workers & Pages** → **KV** → **Create a namespace**
+3. 名称填 `NOTES_KV`
 
-# 安装依赖
-pip install flask flask_limiter
+### 3. 部署 Worker (API 后端)
 
-# 启动应用
-python app.py
-```
+1. **Workers & Pages** → **Create application** → **Import a Git repository**
+2. 选择你 fork 的仓库
+3. 配置：
+   - **Worker name**: `notebook-api`
+   - **Production branch**: `main`
+   - **Root directory**: `worker`
+   - **Build command**: `npm install && npm run deploy`
+4. 部署后，进入 Worker → **Settings** → **Bindings** → **Add** → **KV Namespace**
+   - Variable name: `NOTES_KV`
+   - 选择刚才创建的 KV namespace
 
-应用将在 http://localhost:12345 运行
+### 4. 部署 Pages (前端)
 
-### 使用Docker部署
+1. **Workers & Pages** → **Create application** → **Pages** → **Connect to Git**
+2. 选择同一个仓库
+3. 配置：
+   - **Project name**: `web-notepad`
+   - **Production branch**: `main`
+   - **Root directory**: `public`
+   - **Build command**: `bash build.sh`
+   - **Build output directory**: `.`
+4. **Settings** → **Environment variables** 添加：
+   - `API_BASE_URL` = `https://notebook-api.你的账号.workers.dev`
 
-#### 方式一：使用docker-compose（推荐）
+### 5. 访问
 
-```bash
-# 创建目录并进入
-mkdir web-notepad && cd web-notepad
+部署成功后访问 `https://web-notepad.pages.dev`
 
-# 下载docker-compose配置
-wget https://raw.githubusercontent.com/lissettecarlr/web-notepad/main/docker-compose.yml
+## 免费额度
 
-# 启动容器
-docker-compose up -d
-```
+Cloudflare 免费套餐对个人使用完全足够：
+- KV: 每天 10 万次读取，1,000 次写入
+- Workers: 每天 10 万次请求
+- Pages: 无限请求
 
-#### 方式二：直接使用Docker命令
+## 其他部署方式
 
-```bash
-docker run -d -p 12345:12345 -v $(pwd)/notes:/app/notes lissettecarlr/web-notepad:latest
-```
+如需 Docker/本地部署，请切换到 `main` 分支。
 
-## 🔧 自定义配置
+## License
 
-### 修改上传密码
-
-默认上传密码为`1234`，可通过环境变量修改：
-
-```bash
-# Linux/macOS
-export UPLOAD_PASSWORD=your_password
-python app.py
-
-# Docker方式
-docker run -d -p 12345:12345 -e UPLOAD_PASSWORD=your_password -v $(pwd)/notes:/app/notes lissettecarlr/web-notepad:latest
-```
-
-## 📝 使用提示
-
-- 使用Markdown语法编写笔记，点击预览按钮查看渲染效果
-- 上传文件后可以通过下载按钮随时获取,但同时只能保留一个文件，请在不需要时，手动删除，避免被恶意下载。
-
-
-
-
+MIT
