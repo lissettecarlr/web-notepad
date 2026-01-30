@@ -24,7 +24,7 @@
 body {
     background-color: var(--bg-color);
     color: var(--text-color);
-    transition: all 0.3s ease;
+    transition: background-color 0.3s ease, color 0.3s ease;
     margin: 0;
     padding: 0;
     min-height: 100vh;
@@ -55,7 +55,7 @@ body {
     background: var(--textarea-bg);
     color: var(--text-color);
     cursor: pointer;
-    transition: all 0.3s ease;
+    transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
 }
 
 .theme-btn:hover {
@@ -86,7 +86,7 @@ body {
     font-size: 16px;
     background-color: var(--textarea-bg);
     color: var(--text-color);
-    transition: all 0.3s ease;
+    transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
     resize: vertical;
 }
 
@@ -104,7 +104,7 @@ body {
     color: var(--text-color);
     cursor: pointer;
     border-radius: 4px 4px 0 0;
-    transition: all 0.3s ease;
+    transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
 }
 
 .tab-btn.active {
@@ -144,7 +144,7 @@ body {
     align-items: center;
 }
 
-.control-btn, .action-btn {
+.control-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -154,20 +154,20 @@ body {
     background: var(--textarea-bg);
     color: var(--text-color);
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
     font-size: 14px;
     gap: 6px;
     min-width: 40px;
     height: 36px;
 }
 
-.control-btn:hover, .action-btn:hover {
+.control-btn:hover {
     background: var(--tab-hover);
     transform: translateY(-1px);
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
-.control-btn:active, .action-btn:active {
+.control-btn:active {
     transform: translateY(0);
     box-shadow: none;
 }
@@ -191,7 +191,7 @@ body {
     font-size: 16px;
     background-color: var(--textarea-bg);
     color: var(--text-color);
-    transition: all 0.3s ease;
+    transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
 }
 
 .markdown-preview {
@@ -259,12 +259,6 @@ body {
     }
 } 
 
-/* 文件操作按钮样式 */
-.file-actions {
-    display: flex;
-    gap: 8px;
-}
-
 .file-icon {
     font-size: 16px;
 }
@@ -279,19 +273,14 @@ body {
         display: none;
     }
     
-    .action-btn, .control-btn {
+    .control-btn {
         padding: 8px;
-    }
-    
-    .file-actions {
-        gap: 4px;
     }
 }
 
 /* 删除旧的文件菜单样式 */
 .file-menu,
 .file-dropdown,
-.menu-item,
-.file-upload-label {
+.menu-item {
     display: none;
 }

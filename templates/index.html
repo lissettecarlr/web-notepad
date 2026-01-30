@@ -4,15 +4,10 @@
     <title>在线记事本</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.7.0/styles/github.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/default.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-    
-    <!-- and it's easy to individually load additional languages -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/go.min.js"></script>
-    
-    <script>hljs.highlightAll();</script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+    <script src="{{ url_for('static', filename='script.js') }}" defer></script>
 </head>
 <body>
     <div class="container">
@@ -23,21 +18,6 @@
                     <span class="file-icon">📝</span>
                     <span class="btn-text">预览</span>
                 </button>
-                <div class="file-actions">
-                    <button id="upload-btn" class="action-btn" title="上传文件">
-                        <span class="file-icon">⬆️</span>
-                        <span class="btn-text">上传</span>
-                    </button>
-                    <button id="download-btn" class="action-btn" title="下载文件">
-                        <span class="file-icon">⬇️</span>
-                        <span class="btn-text">下载</span>
-                    </button>
-                    <button id="clear-btn" class="action-btn" title="清除文件">
-                        <span class="file-icon">🗑️</span>
-                        <span class="btn-text">清除</span>
-                    </button>
-                    <input type="file" id="file-upload" style="display:none">
-                </div>
                 <button id="theme-toggle" class="theme-btn">
                     <span class="light-icon">🌞</span>
                     <span class="dark-icon">🌙</span>
@@ -57,6 +37,5 @@
             <div id="status"></div>
         </div>
     </div>
-    <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html> 

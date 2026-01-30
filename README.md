@@ -8,12 +8,8 @@
 - **自动保存** - 停止编辑2秒后自动保存内容，无需手动操作
 - **Markdown支持** - 内置Markdown编辑和预览功能，支持代码高亮
 - **主题切换** - 支持浅色/深色主题自由切换
-- **文件缓存** - 支持临时存储一个不超过500MB的文件
-- **安全保护** - 文件上传需要密码验证（默认：1234，可通过环境变量修改）
 
 ![边界效果展示](./images/2.gif)
-
-![上传效果展示](./images/3.gif)
 
 ## 🚀 快速开始
 
@@ -55,27 +51,4 @@ docker-compose up -d
 ```bash
 docker run -d -p 12345:12345 -v $(pwd)/notes:/app/notes lissettecarlr/web-notepad:latest
 ```
-
-## 🔧 自定义配置
-
-### 修改上传密码
-
-默认上传密码为`1234`，可通过环境变量修改：
-
-```bash
-# Linux/macOS
-export UPLOAD_PASSWORD=your_password
-python app.py
-
-# Docker方式
-docker run -d -p 12345:12345 -e UPLOAD_PASSWORD=your_password -v $(pwd)/notes:/app/notes lissettecarlr/web-notepad:latest
-```
-
-## 📝 使用提示
-
-- 使用Markdown语法编写笔记，点击预览按钮查看渲染效果
-- 上传文件后可以通过下载按钮随时获取,但同时只能保留一个文件，请在不需要时，手动删除，避免被恶意下载。
-
-
-
 

@@ -144,7 +144,7 @@ body {
     align-items: center;
 }
 
-.control-btn, .action-btn {
+.control-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -161,13 +161,13 @@ body {
     height: 36px;
 }
 
-.control-btn:hover, .action-btn:hover {
+.control-btn:hover {
     background: var(--tab-hover);
     transform: translateY(-1px);
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
-.control-btn:active, .action-btn:active {
+.control-btn:active {
     transform: translateY(0);
     box-shadow: none;
 }
@@ -259,12 +259,6 @@ body {
     }
 } 
 
-/* 文件操作按钮样式 */
-.file-actions {
-    display: flex;
-    gap: 8px;
-}
-
 .file-icon {
     font-size: 16px;
 }
@@ -279,19 +273,14 @@ body {
         display: none;
     }
     
-    .action-btn, .control-btn {
+    .control-btn {
         padding: 8px;
-    }
-    
-    .file-actions {
-        gap: 4px;
     }
 }
 
 /* 删除旧的文件菜单样式 */
 .file-menu,
 .file-dropdown,
-.menu-item,
-.file-upload-label {
+.menu-item {
     display: none;
 }
