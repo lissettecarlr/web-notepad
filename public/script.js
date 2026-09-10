@@ -1,197 +1,481 @@
-// Workers API 地址配置
-// 部署后，将 YOUR_WORKER_NAME 替换为你的 Worker 名称
-// 例如：https://notebook-api.your-account.workers.dev
-// 或者使用自定义域名：https://api.yourdomain.com
-const API_BASE_URL = 'https://YOUR_WORKER_NAME.workers.dev';
+// 同源部署时留空；前端与 API 分离部署时填 Worker 地址，如 'https://notebook-api.xxx.workers.dev'
+const API_BASE_URL = '';
 
-let timer = null;
-let currentNotebook = 'notebook1';
-const notepad = document.getElementById('notepad');
-const status_show = document.getElementById('status');
-const tabButtons = document.querySelectorAll('.tab-btn');
+const AUTOSAVE_DELAY = 2000;
+const PREVIEW_DELAY = 150;
+const TOKEN_KEY = 'notepad_token';
+const LAST_TAB_KEY = 'notepad_last_tab';
+const VIEW_KEY = 'notepad_view';
+const draftKey = (nb) => `notepad_draft:${nb}`;
 
-// 主题切换功能
-const themeToggle = document.getElementById('theme-toggle');
+const $ = (id) => document.getElementById(id);
+const notepad = $('notepad');
+const preview = $('preview');
+const statusEl = $('status');
+const statsEl = $('stats');
+const tabsEl = $('tabs');
+const tabAddBtn = $('tab-add');
+const editorContainer = $('editor-container');
+const previewToggle = $('preview-toggle');
+const themeToggle = $('theme-toggle');
 const html = document.documentElement;
 
-// 从本地存储加载主题设置
-const savedTheme = localStorage.getItem('theme') || 'light';
-html.setAttribute('data-theme', savedTheme);
+// ---------- 状态 ----------
+let notebooks = [];
+let currentNotebook = null;
+let currentVersion = null;
+let dirty = false;
+let saving = false;
+let saveQueued = false;
+let saveTimer = null;
+let previewTimer = null;
+let loadAbort = null;
+let conflictRemote = null;
+let viewMode = localStorage.getItem(VIEW_KEY) || 'edit'; // edit | split | preview
 
+// ---------- 工具 ----------
+function setStatus(text, kind = '') {
+    statusEl.textContent = text;
+    statusEl.dataset.kind = kind;
+}
+
+function updateStats() {
+    const text = notepad.value;
+    const chars = [...text.replace(/\s/g, '')].length;
+    const lines = text ? text.split('\n').length : 0;
+    statsEl.textContent = `${chars} 字 · ${lines} 行`;
+}
+
+function getToken() {
+    return localStorage.getItem(TOKEN_KEY) || '';
+}
+
+async function api(path, options = {}, retry = true) {
+    const headers = { ...(options.headers || {}) };
+    if (options.body !== undefined && !(options.body instanceof FormData)) {
+        headers['Content-Type'] = 'application/json';
+    }
+    const token = getToken();
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const res = await fetch(API_BASE_URL + path, { ...options, headers });
+    if (res.status === 401 && retry) {
+        const input = prompt('需要访问令牌（NOTEPAD_TOKEN）：');
+        if (input === null) throw new Error('未授权');
+        localStorage.setItem(TOKEN_KEY, input.trim());
+        return api(path, options, false);
+    }
+    let data = {};
+    try { data = await res.json(); } catch { /* 非 JSON */ }
+    return { res, data };
+}
+
+// ---------- 主题 ----------
+function applyTheme(theme) {
+    html.setAttribute('data-theme', theme);
+    $('hljs-light').disabled = theme === 'dark';
+    $('hljs-dark').disabled = theme !== 'dark';
+    localStorage.setItem('theme', theme);
+}
+applyTheme(localStorage.getItem('theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
 themeToggle.addEventListener('click', () => {
-    const currentTheme = html.getAttribute('data-theme');
-    const newTheme = currentTheme === 'light' ? 'dark' : 'light';
-    
-    html.setAttribute('data-theme', newTheme);
-    localStorage.setItem('theme', newTheme);
+    applyTheme(html.getAttribute('data-theme') === 'light' ? 'dark' : 'light');
 });
 
-// 添加一个加载状态标志
-let isLoading = false;
-
-// 添加一个变量来追踪保存时的笔记本
-let savingNotebook = null;
-
-function loadNotebook(notebook) {
-    // 设置加载状态为true
-    isLoading = true;
-    status_show.textContent = '正在加载...';
-    
-    fetch(`${API_BASE_URL}/load/${notebook}`)
-        .then(response => response.json())
-        .then(data => {
-            if (data.status === 'success') {
-                notepad.value = data.content;
-                if (isPreviewMode) {
-                    updatePreview();
-                }
-                status_show.textContent = '加载完成';
-            } else {
-                status_show.textContent = '加载失败：' + data.message;
-            }
-        })
-        .catch(error => {
-            status_show.textContent = '加载出错：' + error;
-        })
-        .finally(() => {
-            // 加载完成后，无论成功失败，都将加载状态设为false
-            isLoading = false;
-        });
-}
-
-function autoSave() {
-    // 如果正在加载中，不执行保存操作
-    if (isLoading) {
-        return;
-    }
-    
-    // 记录开始保存时的笔记本
-    savingNotebook = currentNotebook;
-    const content = notepad.value;
-    
-    fetch(`${API_BASE_URL}/save`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            content: content,
-            notebook: savingNotebook
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        // 检查当前笔记本是否仍然是开始保存时的笔记本
-        if (savingNotebook !== currentNotebook) {
-            console.log('笔记本已切换，取消保存操作');
-            return;
-        }
-        
-        if (data.status === 'success') {
-            status_show.textContent = '已自动保存 - ' + new Date().toLocaleTimeString();
-        } else {
-            status_show.textContent = '保存失败：' + data.message;
-        }
-    })
-    .catch(error => {
-        // 检查当前笔记本是否仍然是开始保存时的笔记本
-        if (savingNotebook !== currentNotebook) {
-            console.log('笔记本已切换，取消保存操作');
-            return;
-        }
-        status_show.textContent = '保存出错：' + error;
-    })
-    .finally(() => {
-        savingNotebook = null;
+// ---------- 预览 ----------
+function renderPreview() {
+    const raw = marked.parse(notepad.value, { gfm: true, breaks: true });
+    preview.innerHTML = DOMPurify.sanitize(raw, { ADD_ATTR: ['target'] });
+    preview.querySelectorAll('pre code').forEach((block) => hljs.highlightElement(block));
+    preview.querySelectorAll('a[href]').forEach((a) => {
+        a.target = '_blank';
+        a.rel = 'noopener';
     });
 }
 
-// 标签切换事件
-tabButtons.forEach(button => {
-    button.addEventListener('click', () => {
-        // 如果之前的定时器存在，清除它
-        if (timer) {
-            clearTimeout(timer);
-            timer = null;
-        }
-        
-        // 更新标签样式
-        tabButtons.forEach(btn => btn.classList.remove('active'));
-        button.classList.add('active');
-        
-        // 加载新笔记本
-        currentNotebook = button.dataset.notebook;
-        loadNotebook(currentNotebook);
-    });
-});
-
-notepad.addEventListener('input', () => {
-    if (timer) {
-        clearTimeout(timer);
-    }
-    timer = setTimeout(autoSave, 2000);
-});
-
-// 初始加载第一个笔记本
-loadNotebook(currentNotebook);
-
-// Markdown 预览功能
-const previewToggle = document.getElementById('preview-toggle');
-const preview = document.getElementById('preview');
-const editorContainer = document.querySelector('.editor-container');
-let isPreviewMode = false;
-
-// 配置 marked 选项
-marked.setOptions({
-    highlight: function(code, lang) {
-        if (lang && hljs.getLanguage(lang)) {
-            return hljs.highlight(code, { language: lang }).value;
-        }
-        return hljs.highlightAuto(code).value;
-    },
-    breaks: true
-});
-
-function updatePreview() {
-    const content = notepad.value;
-    preview.innerHTML = marked.parse(content);
-    document.querySelectorAll('pre code').forEach((block) => {
-        hljs.highlightBlock(block);
-    });
+function applyViewMode(mode) {
+    viewMode = mode;
+    localStorage.setItem(VIEW_KEY, mode);
+    editorContainer.classList.toggle('preview-mode', mode === 'preview');
+    editorContainer.classList.toggle('split-mode', mode === 'split');
+    const icon = previewToggle.querySelector('.file-icon');
+    const text = previewToggle.querySelector('.btn-text');
+    if (mode === 'edit') { icon.textContent = '📝'; text.textContent = '预览'; }
+    else if (mode === 'split') { icon.textContent = '⫿'; text.textContent = '分栏'; }
+    else { icon.textContent = '✏️'; text.textContent = '编辑'; }
+    if (mode !== 'edit') renderPreview();
 }
 
 previewToggle.addEventListener('click', () => {
-    isPreviewMode = !isPreviewMode;
-    editorContainer.classList.toggle('preview-mode');
-    
-    // 更新预览按钮的图标和文本
-    const iconElement = previewToggle.querySelector('.file-icon');
-    const textElement = previewToggle.querySelector('.btn-text');
-    
-    if (isPreviewMode) {
-        iconElement.textContent = '✏️';
-        textElement.textContent = '编辑';
-        updatePreview();
-        if (timer) {
-            clearTimeout(timer);
-            timer = null;
+    const order = ['edit', 'split', 'preview'];
+    applyViewMode(order[(order.indexOf(viewMode) + 1) % order.length]);
+});
+
+// ---------- 草稿 ----------
+function saveDraft() {
+    if (!currentNotebook) return;
+    try {
+        localStorage.setItem(draftKey(currentNotebook), JSON.stringify({
+            content: notepad.value,
+            version: currentVersion,
+            ts: Date.now(),
+        }));
+    } catch { /* 容量满了就算了 */ }
+}
+
+function clearDraft(nb = currentNotebook) {
+    if (nb) localStorage.removeItem(draftKey(nb));
+}
+
+function checkDraft(nb, serverContent) {
+    const raw = localStorage.getItem(draftKey(nb));
+    if (!raw) return;
+    let draft;
+    try { draft = JSON.parse(raw); } catch { clearDraft(nb); return; }
+    if (!draft || draft.content === serverContent) { clearDraft(nb); return; }
+    const banner = $('draft-banner');
+    banner.hidden = false;
+    $('draft-restore').onclick = () => {
+        banner.hidden = true;
+        notepad.value = draft.content;
+        markDirty();
+        scheduleSave(0);
+    };
+    $('draft-discard').onclick = () => {
+        banner.hidden = true;
+        clearDraft(nb);
+    };
+}
+
+// ---------- 加载 / 保存 ----------
+async function loadNotebook(nb) {
+    if (loadAbort) loadAbort.abort();
+    loadAbort = new AbortController();
+    $('conflict-banner').hidden = true;
+    $('draft-banner').hidden = true;
+    setStatus('正在加载…');
+    try {
+        const { res, data } = await api(`/load/${encodeURIComponent(nb)}`, { signal: loadAbort.signal });
+        if (nb !== currentNotebook) return;
+        if (!res.ok || data.status !== 'success') {
+            setStatus('加载失败：' + (data.message || res.status), 'error');
+            return;
         }
-    } else {
-        iconElement.textContent = '📝';
-        textElement.textContent = '预览';
+        notepad.value = data.content;
+        currentVersion = data.version;
+        dirty = false;
+        setStatus('加载完成');
+        updateStats();
+        if (viewMode !== 'edit') renderPreview();
+        checkDraft(nb, data.content);
+    } catch (e) {
+        if (e.name === 'AbortError') return;
+        setStatus('加载出错：' + e.message, 'error');
+    }
+}
+
+function markDirty() {
+    dirty = true;
+    setStatus('未保存…', 'dirty');
+    saveDraft();
+    updateStats();
+}
+
+function scheduleSave(delay = AUTOSAVE_DELAY) {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => { saveTimer = null; autoSave(); }, delay);
+}
+
+async function autoSave(force = false) {
+    if (!dirty || !currentNotebook) return;
+    if (saving) { saveQueued = true; return; }
+    saving = true;
+    const nb = currentNotebook;
+    const content = notepad.value;
+    const version = currentVersion;
+    setStatus('保存中…');
+    try {
+        const { res, data } = await api('/save', {
+            method: 'POST',
+            body: JSON.stringify({ notebook: nb, content, version, force }),
+        });
+        if (nb !== currentNotebook) return; // 期间切换了笔记本
+        if (res.status === 409) {
+            conflictRemote = data;
+            $('conflict-banner').hidden = false;
+            setStatus('保存被拒绝：远端有新版本', 'error');
+            return;
+        }
+        if (!res.ok || data.status !== 'success') {
+            setStatus('保存失败：' + (data.message || res.status), 'error');
+            return;
+        }
+        currentVersion = data.version;
+        $('conflict-banner').hidden = true;
+        if (notepad.value === content) {
+            dirty = false;
+            clearDraft(nb);
+            setStatus('已保存 - ' + new Date().toLocaleTimeString());
+        } else {
+            saveQueued = true; // 保存期间又改了
+        }
+    } catch (e) {
+        if (nb === currentNotebook) setStatus('保存出错：' + e.message + '（已存本地草稿）', 'error');
+    } finally {
+        saving = false;
+        if (saveQueued) {
+            saveQueued = false;
+            scheduleSave(300);
+        }
+    }
+}
+
+function flushSave() {
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+    return autoSave();
+}
+
+$('conflict-reload').addEventListener('click', () => {
+    if (!conflictRemote) return;
+    notepad.value = conflictRemote.content ?? '';
+    currentVersion = conflictRemote.version;
+    dirty = false;
+    clearDraft();
+    conflictRemote = null;
+    $('conflict-banner').hidden = true;
+    setStatus('已加载远端版本');
+    updateStats();
+    if (viewMode !== 'edit') renderPreview();
+});
+
+$('conflict-overwrite').addEventListener('click', () => {
+    $('conflict-banner').hidden = true;
+    conflictRemote = null;
+    dirty = true;
+    autoSave(true);
+});
+
+// 关闭页面前兜底保存
+window.addEventListener('pagehide', () => {
+    if (!dirty || !currentNotebook) return;
+    saveDraft();
+    const headers = { 'Content-Type': 'application/json' };
+    const token = getToken();
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    fetch(API_BASE_URL + '/save', {
+        method: 'POST',
+        headers,
+        keepalive: true,
+        body: JSON.stringify({ notebook: currentNotebook, content: notepad.value, version: currentVersion }),
+    }).catch(() => {});
+});
+
+window.addEventListener('beforeunload', (e) => {
+    if (dirty && saving) { e.preventDefault(); e.returnValue = ''; }
+});
+
+// ---------- 编辑器输入 ----------
+notepad.addEventListener('input', () => {
+    markDirty();
+    scheduleSave();
+    if (viewMode !== 'edit') {
+        if (previewTimer) clearTimeout(previewTimer);
+        previewTimer = setTimeout(renderPreview, PREVIEW_DELAY);
     }
 });
 
-// 修改输入事件处理
-notepad.addEventListener('input', () => {
-    if (isPreviewMode) {
-        updatePreview();
-        return; // 预览模式下不启动自动保存
+notepad.addEventListener('keydown', (e) => {
+    if (e.key === 'Tab') {
+        e.preventDefault();
+        indentSelection(e.shiftKey);
+        notepad.dispatchEvent(new Event('input'));
     }
-    
-    // 只在编辑模式下执行自动保存
-    if (timer) {
-        clearTimeout(timer);
-    }
-    timer = setTimeout(autoSave, 2000);
 });
+
+function indentSelection(outdent) {
+    const INDENT = '    ';
+    const { selectionStart: start, selectionEnd: end, value } = notepad;
+    const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+    const lineEndIdx = value.indexOf('\n', end);
+    const lineEnd = lineEndIdx === -1 ? value.length : lineEndIdx;
+    const multiLine = value.slice(start, end).includes('\n');
+
+    if (!multiLine && !outdent) {
+        notepad.setRangeText(INDENT, start, end, 'end');
+        return;
+    }
+    const block = value.slice(lineStart, lineEnd);
+    const lines = block.split('\n');
+    let removedFirst = 0;
+    const out = lines.map((ln, i) => {
+        if (outdent) {
+            const m = ln.match(/^( {1,4}|\t)/);
+            const cut = m ? m[0].length : 0;
+            if (i === 0) removedFirst = cut;
+            return ln.slice(cut);
+        }
+        return INDENT + ln;
+    }).join('\n');
+    notepad.setRangeText(out, lineStart, lineEnd, 'preserve');
+    const delta = out.length - block.length;
+    const newStart = outdent ? Math.max(lineStart, start - removedFirst) : start + INDENT.length;
+    notepad.setSelectionRange(newStart, end + delta);
+}
+
+document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        flushSave();
+    }
+    if (e.key === 'Escape') {
+        $('history-panel').hidden = true;
+    }
+});
+
+// ---------- 笔记本标签 ----------
+function renderTabs() {
+    tabsEl.querySelectorAll('.tab-btn:not(.tab-add)').forEach((el) => el.remove());
+    notebooks.forEach((nb) => {
+        const btn = document.createElement('button');
+        btn.className = 'tab-btn' + (nb.name === currentNotebook ? ' active' : '');
+        btn.dataset.notebook = nb.name;
+        btn.title = '双击重命名';
+        const label = document.createElement('span');
+        label.textContent = nb.name;
+        btn.appendChild(label);
+        if (nb.name === currentNotebook && notebooks.length > 1) {
+            const close = document.createElement('span');
+            close.className = 'tab-close';
+            close.textContent = '×';
+            close.title = '删除笔记本';
+            close.addEventListener('click', (e) => { e.stopPropagation(); deleteNotebook(nb.name); });
+            btn.appendChild(close);
+        }
+        btn.addEventListener('click', () => switchNotebook(nb.name));
+        btn.addEventListener('dblclick', (e) => { e.preventDefault(); renameNotebook(nb.name); });
+        tabsEl.insertBefore(btn, tabAddBtn);
+    });
+}
+
+async function switchNotebook(name) {
+    if (name === currentNotebook) return;
+    await flushSave();
+    currentNotebook = name;
+    localStorage.setItem(LAST_TAB_KEY, name);
+    history.replaceState(null, '', `#${encodeURIComponent(name)}`);
+    renderTabs();
+    await loadNotebook(name);
+}
+
+async function refreshNotebooks() {
+    const { res, data } = await api('/notebooks');
+    if (!res.ok || data.status !== 'success') throw new Error(data.message || res.status);
+    notebooks = data.notebooks;
+    renderTabs();
+}
+
+async function createNotebook() {
+    const name = prompt('新笔记本名称（字母、数字、中文、- _）：');
+    if (!name) return;
+    const { res, data } = await api('/notebooks', { method: 'POST', body: JSON.stringify({ name: name.trim() }) });
+    if (!res.ok) { alert(data.message || '创建失败'); return; }
+    await refreshNotebooks();
+    switchNotebook(data.name);
+}
+
+async function renameNotebook(oldName) {
+    const name = prompt('重命名为：', oldName);
+    if (!name || name.trim() === oldName) return;
+    await flushSave();
+    const { res, data } = await api(`/notebooks/${encodeURIComponent(oldName)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ name: name.trim() }),
+    });
+    if (!res.ok) { alert(data.message || '重命名失败'); return; }
+    const draft = localStorage.getItem(draftKey(oldName));
+    if (draft) { localStorage.setItem(draftKey(data.name), draft); clearDraft(oldName); }
+    if (currentNotebook === oldName) {
+        currentNotebook = data.name;
+        currentVersion = data.version;
+        localStorage.setItem(LAST_TAB_KEY, data.name);
+        history.replaceState(null, '', `#${encodeURIComponent(data.name)}`);
+    }
+    await refreshNotebooks();
+}
+
+async function deleteNotebook(name) {
+    if (!confirm(`确定删除「${name}」？（会在历史目录保留一份快照）`)) return;
+    const { res, data } = await api(`/notebooks/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    if (!res.ok) { alert(data.message || '删除失败'); return; }
+    clearDraft(name);
+    await refreshNotebooks();
+    if (currentNotebook === name) {
+        currentNotebook = null;
+        dirty = false;
+        await switchNotebook(notebooks[0].name);
+    }
+}
+
+tabAddBtn.addEventListener('click', createNotebook);
+
+// ---------- 历史版本 ----------
+const historyPanel = $('history-panel');
+const historyList = $('history-list');
+let historySelected = null;
+
+$('history-toggle').addEventListener('click', async () => {
+    if (!historyPanel.hidden) { historyPanel.hidden = true; return; }
+    await flushSave();
+    const { res, data } = await api(`/history/${encodeURIComponent(currentNotebook)}`);
+    historyList.innerHTML = '';
+    $('history-preview').hidden = true;
+    if (!res.ok) return;
+    if (!data.history.length) {
+        historyList.innerHTML = '<li class="muted">还没有历史版本</li>';
+    }
+    data.history.forEach((h) => {
+        const li = document.createElement('li');
+        const m = h.id.match(/^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})/);
+        li.textContent = m ? `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}:${m[6]}  (${h.size} B)` : h.id;
+        li.addEventListener('click', async () => {
+            historyList.querySelectorAll('li').forEach((el) => el.classList.remove('active'));
+            li.classList.add('active');
+            const r = await api(`/history/${encodeURIComponent(currentNotebook)}/${h.id}`);
+            if (!r.res.ok) return;
+            historySelected = r.data.content;
+            $('history-content').textContent = historySelected;
+            $('history-preview').hidden = false;
+        });
+        historyList.appendChild(li);
+    });
+    historyPanel.hidden = false;
+});
+$('history-close').addEventListener('click', () => { historyPanel.hidden = true; });
+$('history-restore').addEventListener('click', () => {
+    if (historySelected === null) return;
+    if (!confirm('用此历史版本覆盖当前内容？（当前内容会先存入历史）')) return;
+    notepad.value = historySelected;
+    historyPanel.hidden = true;
+    markDirty();
+    flushSave();
+    if (viewMode !== 'edit') renderPreview();
+});
+
+// ---------- 启动 ----------
+(async function init() {
+    applyViewMode(viewMode);
+    try {
+        await refreshNotebooks();
+    } catch (e) {
+        setStatus('无法获取笔记本列表：' + e.message, 'error');
+        return;
+    }
+    const fromHash = decodeURIComponent(location.hash.slice(1));
+    const remembered = localStorage.getItem(LAST_TAB_KEY);
+    const pick = [fromHash, remembered].find((n) => n && notebooks.some((nb) => nb.name === n)) || notebooks[0].name;
+    currentNotebook = pick;
+    localStorage.setItem(LAST_TAB_KEY, pick);
+    history.replaceState(null, '', `#${encodeURIComponent(pick)}`);
+    renderTabs();
+    await loadNotebook(pick);
+})();

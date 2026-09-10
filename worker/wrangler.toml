@@ -1,22 +1,30 @@
 name = "notebook-api"
 main = "src/index.js"
-compatibility_date = "2024-01-01"
+compatibility_date = "2024-09-23"
+
+# 静态前端直接由 Worker 托管（同源，不需要 CORS）
+# 未匹配到静态文件的请求（/load、/save、/notebooks…）才会进入 src/index.js
+[assets]
+directory = "../public"
 
 # KV Namespace 绑定
-# 注意：需要先在 Cloudflare Dashboard 创建 KV Namespace，然后替换下面的 ID
-# 创建方法：Workers & Pages -> KV -> Create a namespace
-# 创建后，在 Worker 的 Settings -> Variables -> KV Namespace Bindings 中绑定
-# 或者使用命令：wrangler kv:namespace create "NOTES_KV"
-# 然后将生成的 ID 填入下面的 kv_namespaces
-# KV Namespace 需要在 Cloudflare Dashboard 中绑定
-# 部署后，进入 Worker Settings → Bindings → Add → KV Namespace
-# Variable name: NOTES_KV，选择你创建的 KV namespace
-# kv_namespaces = [
-#   { binding = "NOTES_KV", id = "YOUR_KV_NAMESPACE_ID" }
-# ]
+# 创建：wrangler kv namespace create NOTES_KV
+# 然后把生成的 id 填到下面（或在 Dashboard: Worker → Settings → Bindings 中绑定）
+[[kv_namespaces]]
+binding = "NOTES_KV"
+id = "YOUR_KV_NAMESPACE_ID"
 
+[vars]
+# 历史快照保留份数
+HISTORY_KEEP = "20"
+# 如果前端不是同源部署，填允许的来源，多个用逗号分隔；留空即禁用 CORS
+# ALLOWED_ORIGIN = "https://notes.example.com"
 
-# 路由配置（可选，如果使用自定义域名）
+# 访问令牌（可选但强烈建议）：
+#   wrangler secret put NOTEPAD_TOKEN
+# 设置后前端首次访问会弹窗要求输入。
+
+# 自定义域名（可选）
 # routes = [
-#   { pattern = "api.yourdomain.com/*", zone_name = "yourdomain.com" }
+#   { pattern = "notes.yourdomain.com", custom_domain = true }
 # ]

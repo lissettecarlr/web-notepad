@@ -1,47 +1,74 @@
 <!DOCTYPE html>
-<html data-theme="light">
+<html lang="zh-CN" data-theme="light">
 <head>
+    <meta charset="utf-8">
     <title>在线记事本</title>
-    <link rel="stylesheet" href="/style.css">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.7.0/styles/github.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/default.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-    
-    <!-- and it's easy to individually load additional languages -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/go.min.js"></script>
-    
-    <script>hljs.highlightAll();</script>
+    <link rel="icon" href="/favicon.ico">
+    <link rel="stylesheet" href="/style.css">
+    <link rel="stylesheet" href="/vendor/github.min.css" id="hljs-light">
+    <link rel="stylesheet" href="/vendor/github-dark.min.css" id="hljs-dark" disabled>
+    <script src="/vendor/marked.min.js" defer></script>
+    <script src="/vendor/highlight.min.js" defer></script>
+    <script src="/vendor/purify.min.js" defer></script>
+    <script src="/script.js" defer></script>
 </head>
 <body>
     <div class="container">
         <div class="header">
             <h1>在线记事本</h1>
             <div class="header-buttons">
-                <button id="preview-toggle" class="control-btn" title="切换预览模式">
+                <button id="history-toggle" class="control-btn" title="历史版本">
+                    <span class="file-icon">🕘</span>
+                    <span class="btn-text">历史</span>
+                </button>
+                <button id="preview-toggle" class="control-btn" title="切换预览模式（编辑 / 分栏 / 预览）">
                     <span class="file-icon">📝</span>
                     <span class="btn-text">预览</span>
                 </button>
-                <button id="theme-toggle" class="theme-btn">
+                <button id="theme-toggle" class="theme-btn" title="切换主题">
                     <span class="light-icon">🌞</span>
                     <span class="dark-icon">🌙</span>
                 </button>
             </div>
         </div>
         <div class="content-area">
-            <div class="tabs">
-                <button class="tab-btn active" data-notebook="notebook1">笔记本1</button>
-                <button class="tab-btn" data-notebook="notebook2">笔记本2</button>
-                <button class="tab-btn" data-notebook="notebook3">笔记本3</button>
+            <div class="tabs" id="tabs">
+                <button id="tab-add" class="tab-btn tab-add" title="新建笔记本">＋</button>
             </div>
-            <div class="editor-container">
-                <textarea id="notepad" placeholder="在这里输入Markdown内容..."></textarea>
+            <div class="editor-container" id="editor-container">
+                <textarea id="notepad" placeholder="在这里输入 Markdown 内容…（Ctrl+S 立即保存，Tab 缩进）" spellcheck="false"></textarea>
                 <div id="preview" class="markdown-preview"></div>
             </div>
-            <div id="status"></div>
+            <div class="status-bar">
+                <span id="status"></span>
+                <span id="stats"></span>
+            </div>
         </div>
     </div>
-    <script src="/script.js"></script>
+
+    <div id="conflict-banner" class="banner" hidden>
+        <span>⚠️ 这个笔记本已在别处被修改。</span>
+        <button id="conflict-reload" class="control-btn">加载远端版本</button>
+        <button id="conflict-overwrite" class="control-btn">用本地覆盖</button>
+    </div>
+
+    <div id="draft-banner" class="banner" hidden>
+        <span>💾 检测到上次未成功保存的本地草稿。</span>
+        <button id="draft-restore" class="control-btn">恢复草稿</button>
+        <button id="draft-discard" class="control-btn">丢弃</button>
+    </div>
+
+    <div id="history-panel" class="side-panel" hidden>
+        <div class="side-panel-header">
+            <strong>历史版本</strong>
+            <button id="history-close" class="control-btn">✕</button>
+        </div>
+        <ul id="history-list"></ul>
+        <div id="history-preview" class="history-preview" hidden>
+            <pre id="history-content"></pre>
+            <button id="history-restore" class="control-btn">恢复到此版本</button>
+        </div>
+    </div>
 </body>
 </html>

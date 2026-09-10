@@ -1,9 +1,20 @@
-version: '3'
 services:
   web-notepad:
     image: lissettecarlr/web-notepad:latest
+    # 本地构建用下面这行替代 image：
+    # build: .
     ports:
       - "12345:12345"
     volumes:
       - ./notes:/app/notes
-    restart: always 
+    environment:
+      # 访问令牌，留空则不鉴权（仅建议内网使用）
+      NOTEPAD_TOKEN: ""
+      # 历史快照保留份数
+      HISTORY_KEEP: "20"
+      # 单篇笔记大小上限（字节）
+      MAX_NOTE_BYTES: "5242880"
+      # 可选：容器内运行用户，想让 notes/ 里的文件归宿主机某用户时填 `id -u` / `id -g` 的值
+      # PUID: "1000"
+      # PGID: "1000"
+    restart: always
