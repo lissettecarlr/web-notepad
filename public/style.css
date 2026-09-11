@@ -176,15 +176,13 @@ body {
 .editor-container {
     flex: 1;
     display: flex;
-    gap: 20px;
-    position: relative;
     min-height: 0;
     margin: 20px 0 8px;
 }
 
-#notepad,
-.markdown-preview {
+#notepad {
     flex: 1;
+    width: 100%;
     min-height: 300px;
     height: calc(100vh - 230px);
     padding: 15px;
@@ -195,9 +193,6 @@ body {
     background-color: var(--textarea-bg);
     color: var(--text-color);
     transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
-}
-
-#notepad {
     resize: vertical;
     font-family: ui-monospace, "Cascadia Code", Consolas, "SFMono-Regular", Menlo, monospace;
     line-height: 1.5;
@@ -207,70 +202,6 @@ body {
 #notepad:focus {
     outline: none;
     border-color: var(--accent);
-}
-
-.markdown-preview {
-    display: none;
-    overflow-y: auto;
-    line-height: 1.6;
-    word-wrap: break-word;
-}
-
-.preview-mode #notepad {
-    display: none;
-}
-
-.preview-mode .markdown-preview,
-.split-mode .markdown-preview {
-    display: block;
-}
-
-/* Markdown 样式 */
-.markdown-preview h1 { font-size: 2em; margin: 0.4em 0 0.5em; }
-.markdown-preview h2 { font-size: 1.5em; margin: 0.6em 0 0.5em; }
-.markdown-preview h3 { font-size: 1.3em; margin: 0.6em 0 0.5em; }
-.markdown-preview p { margin: 0 0 1em; }
-.markdown-preview a { color: var(--accent); }
-.markdown-preview code {
-    background-color: var(--tab-bg);
-    padding: 2px 4px;
-    border-radius: 3px;
-    font-family: ui-monospace, Consolas, Menlo, monospace;
-    font-size: 0.92em;
-}
-.markdown-preview pre {
-    margin: 0 0 1em;
-}
-.markdown-preview pre code {
-    display: block;
-    padding: 1em;
-    overflow-x: auto;
-    line-height: 1.4;
-    border-radius: 4px;
-}
-.markdown-preview blockquote {
-    border-left: 4px solid var(--textarea-border);
-    margin: 0 0 1em;
-    padding-left: 1em;
-    color: var(--status-color);
-}
-.markdown-preview img {
-    max-width: 100%;
-    height: auto;
-}
-.markdown-preview table {
-    border-collapse: collapse;
-    width: 100%;
-    margin-bottom: 1em;
-}
-.markdown-preview th,
-.markdown-preview td {
-    border: 1px solid var(--textarea-border);
-    padding: 8px;
-    text-align: left;
-}
-.markdown-preview input[type="checkbox"] {
-    margin-right: 6px;
 }
 
 /* 状态栏 */
@@ -433,21 +364,8 @@ body {
         padding: 8px 10px;
     }
 
-    .editor-container {
-        flex-direction: column;
-        gap: 10px;
-    }
-
-    #notepad,
-    .markdown-preview {
-        width: 100%;
+    #notepad {
         height: calc(100vh - 230px);
         font-size: 14px;
-    }
-
-    .split-mode #notepad,
-    .split-mode .markdown-preview {
-        height: calc(50vh - 120px);
-        min-height: 200px;
     }
 }

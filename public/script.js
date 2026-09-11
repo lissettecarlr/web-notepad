@@ -2,10 +2,8 @@
 const API_BASE_URL = '';
 
 const AUTOSAVE_DELAY = 2000;
-const PREVIEW_DELAY = 150;
 const TOKEN_KEY = 'notepad_token';
 const LAST_TAB_KEY = 'notepad_last_tab';
-const VIEW_KEY = 'notepad_view';
 const LEGACY_TABS = { notebook1: '翠', notebook2: '梅贝儿', notebook3: '爱利希雅' };
 // 是否在界面上显示 新建 / 重命名 / 删除 笔记本的入口。后端接口一直保留，改成 true 即可恢复。
 const ENABLE_NOTEBOOK_MANAGE = false;
@@ -13,13 +11,10 @@ const draftKey = (nb) => `notepad_draft:${nb}`;
 
 const $ = (id) => document.getElementById(id);
 const notepad = $('notepad');
-const preview = $('preview');
 const statusEl = $('status');
 const statsEl = $('stats');
 const tabsEl = $('tabs');
 const tabAddBtn = $('tab-add');
-const editorContainer = $('editor-container');
-const previewToggle = $('preview-toggle');
 const themeToggle = $('theme-toggle');
 const html = document.documentElement;
 
@@ -31,10 +26,8 @@ let dirty = false;
 let saving = false;
 let saveQueued = false;
 let saveTimer = null;
-let previewTimer = null;
 let loadAbort = null;
 let conflictRemote = null;
-let viewMode = localStorage.getItem(VIEW_KEY) || 'edit'; // edit | split | preview
 
 // ---------- 工具 ----------
 function setStatus(text, kind = '') {
@@ -76,38 +69,11 @@ async function api(path, options = {}, retry = true) {
 // ---------- 主题 ----------
 function applyTheme(theme) {
     html.setAttribute('data-theme', theme);
-    $('hljs-light').disabled = theme === 'dark';
-    $('hljs-dark').disabled = theme !== 'dark';
     localStorage.setItem('theme', theme);
 }
 applyTheme(localStorage.getItem('theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
 themeToggle.addEventListener('click', () => {
     applyTheme(html.getAttribute('data-theme') === 'light' ? 'dark' : 'light');
-});
-
-// ---------- 预览 ----------
-function renderPreview() {
-    const raw = marked.parse(notepad.value, { gfm: true, breaks: true });
-    preview.innerHTML = DOMPurify.sanitize(raw, { ADD_ATTR: ['target'] });
-    preview.querySelectorAll('pre code').forEach((block) => hljs.highlightElement(block));
-    preview.querySelectorAll('a[href]').forEach((a) => {
-        a.target = '_blank';
-        a.rel = 'noopener';
-    });
-}
-
-function applyViewMode(mode) {
-    viewMode = mode;
-    localStorage.setItem(VIEW_KEY, mode);
-    editorContainer.classList.toggle('preview-mode', mode === 'preview');
-    editorContainer.classList.toggle('split-mode', mode === 'split');
-    previewToggle.textContent = mode === 'edit' ? '预览' : mode === 'split' ? '分栏' : '编辑';
-    if (mode !== 'edit') renderPreview();
-}
-
-previewToggle.addEventListener('click', () => {
-    const order = ['edit', 'split', 'preview'];
-    applyViewMode(order[(order.indexOf(viewMode) + 1) % order.length]);
 });
 
 // ---------- 草稿 ----------
@@ -165,7 +131,6 @@ async function loadNotebook(nb) {
         dirty = false;
         setStatus('加载完成');
         updateStats();
-        if (viewMode !== 'edit') renderPreview();
         checkDraft(nb, data.content);
     } catch (e) {
         if (e.name === 'AbortError') return;
@@ -244,7 +209,6 @@ $('conflict-reload').addEventListener('click', () => {
     $('conflict-banner').hidden = true;
     setStatus('已加载远端版本');
     updateStats();
-    if (viewMode !== 'edit') renderPreview();
 });
 
 $('conflict-overwrite').addEventListener('click', () => {
@@ -277,10 +241,6 @@ window.addEventListener('beforeunload', (e) => {
 notepad.addEventListener('input', () => {
     markDirty();
     scheduleSave();
-    if (viewMode !== 'edit') {
-        if (previewTimer) clearTimeout(previewTimer);
-        previewTimer = setTimeout(renderPreview, PREVIEW_DELAY);
-    }
 });
 
 notepad.addEventListener('keydown', (e) => {
@@ -504,12 +464,10 @@ $('history-restore').addEventListener('click', () => {
     historyPanel.hidden = true;
     markDirty();
     flushSave();
-    if (viewMode !== 'edit') renderPreview();
 });
 
 // ---------- 启动 ----------
 (async function init() {
-    applyViewMode(viewMode);
     try {
         await refreshNotebooks();
     } catch (e) {

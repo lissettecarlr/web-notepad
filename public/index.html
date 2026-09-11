@@ -6,11 +6,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="/favicon.ico">
     <link rel="stylesheet" href="/style.css">
-    <link rel="stylesheet" href="/vendor/github.min.css" id="hljs-light">
-    <link rel="stylesheet" href="/vendor/github-dark.min.css" id="hljs-dark" disabled>
-    <script src="/vendor/marked.min.js" defer></script>
-    <script src="/vendor/highlight.min.js" defer></script>
-    <script src="/vendor/purify.min.js" defer></script>
     <script src="/script.js" defer></script>
 </head>
 <body>
@@ -19,7 +14,6 @@
             <h1>在线记事本</h1>
             <div class="header-buttons">
                 <button id="history-toggle" class="control-btn" title="历史版本">历史</button>
-                <button id="preview-toggle" class="control-btn" title="切换预览模式（编辑 / 分栏 / 预览）">预览</button>
                 <button id="theme-toggle" class="control-btn" title="切换主题">
                     <span class="light-icon">深色</span>
                     <span class="dark-icon">浅色</span>
@@ -30,9 +24,8 @@
             <div class="tabs" id="tabs">
                 <button id="tab-add" class="tab-btn tab-add" title="新建笔记本">＋</button>
             </div>
-            <div class="editor-container" id="editor-container">
-                <textarea id="notepad" placeholder="在这里输入 Markdown 内容…（Ctrl+S 立即保存，Tab 缩进）" spellcheck="false"></textarea>
-                <div id="preview" class="markdown-preview"></div>
+            <div class="editor-container">
+                <textarea id="notepad" placeholder="在这里输入内容…（Ctrl+S 立即保存，Tab 缩进）" spellcheck="false"></textarea>
             </div>
             <div class="status-bar">
                 <span id="status"></span>
