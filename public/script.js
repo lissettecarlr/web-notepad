@@ -101,11 +101,7 @@ function applyViewMode(mode) {
     localStorage.setItem(VIEW_KEY, mode);
     editorContainer.classList.toggle('preview-mode', mode === 'preview');
     editorContainer.classList.toggle('split-mode', mode === 'split');
-    const icon = previewToggle.querySelector('.file-icon');
-    const text = previewToggle.querySelector('.btn-text');
-    if (mode === 'edit') { icon.textContent = '📝'; text.textContent = '预览'; }
-    else if (mode === 'split') { icon.textContent = '⫿'; text.textContent = '分栏'; }
-    else { icon.textContent = '✏️'; text.textContent = '编辑'; }
+    previewToggle.textContent = mode === 'edit' ? '预览' : mode === 'split' ? '分栏' : '编辑';
     if (mode !== 'edit') renderPreview();
 }
 

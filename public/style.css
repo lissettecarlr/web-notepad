@@ -80,48 +80,28 @@ body {
 }
 
 /* 按钮 */
-.control-btn,
-.theme-btn {
+.control-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
     padding: 8px 12px;
     height: 36px;
-    min-width: 40px;
     border-radius: 4px;
     border: 1px solid var(--textarea-border);
     background: var(--textarea-bg);
     color: var(--text-color);
     cursor: pointer;
     font-size: 14px;
-    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 
-.theme-btn {
-    border-radius: 20px;
-}
-
-.control-btn:hover,
-.theme-btn:hover {
+.control-btn:hover {
     background: var(--tab-hover);
-    transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.control-btn:active,
-.theme-btn:active {
-    transform: translateY(0);
-    box-shadow: none;
 }
 
 [data-theme="light"] .dark-icon,
 [data-theme="dark"] .light-icon {
     display: none;
-}
-
-.file-icon {
-    font-size: 16px;
 }
 
 /* 内容区 */
@@ -449,12 +429,8 @@ body {
         font-size: 1.3em;
     }
 
-    .btn-text {
-        display: none;
-    }
-
     .control-btn {
-        padding: 8px;
+        padding: 8px 10px;
     }
 
     .editor-container {
