@@ -7,6 +7,8 @@ const TOKEN_KEY = 'notepad_token';
 const LAST_TAB_KEY = 'notepad_last_tab';
 const VIEW_KEY = 'notepad_view';
 const LEGACY_TABS = { notebook1: '翠', notebook2: '梅贝儿', notebook3: '爱利希雅' };
+// 是否在界面上显示 新建 / 重命名 / 删除 笔记本的入口。后端接口一直保留，改成 true 即可恢复。
+const ENABLE_NOTEBOOK_MANAGE = false;
 const draftKey = (nb) => `notepad_draft:${nb}`;
 
 const $ = (id) => document.getElementById(id);
@@ -340,11 +342,11 @@ function renderTabs() {
         const btn = document.createElement('button');
         btn.className = 'tab-btn' + (nb.name === currentNotebook ? ' active' : '');
         btn.dataset.notebook = nb.name;
-        btn.title = '双击重命名';
+        if (ENABLE_NOTEBOOK_MANAGE) btn.title = '双击重命名';
         const label = document.createElement('span');
         label.textContent = nb.name;
         btn.appendChild(label);
-        if (nb.name === currentNotebook && notebooks.length > 1) {
+        if (ENABLE_NOTEBOOK_MANAGE && nb.name === currentNotebook && notebooks.length > 1) {
             const close = document.createElement('span');
             close.className = 'tab-close';
             close.textContent = '×';
@@ -353,7 +355,9 @@ function renderTabs() {
             btn.appendChild(close);
         }
         btn.addEventListener('click', () => switchNotebook(nb.name));
-        btn.addEventListener('dblclick', (e) => { e.preventDefault(); renameNotebook(nb.name); });
+        if (ENABLE_NOTEBOOK_MANAGE) {
+            btn.addEventListener('dblclick', (e) => { e.preventDefault(); renameNotebook(nb.name); });
+        }
         tabsEl.insertBefore(btn, tabAddBtn);
     });
 }
@@ -417,6 +421,7 @@ async function deleteNotebook(name) {
     }
 }
 
+tabAddBtn.hidden = !ENABLE_NOTEBOOK_MANAGE;
 tabAddBtn.addEventListener('click', createNotebook);
 
 // ---------- 历史版本 ----------
