@@ -6,6 +6,7 @@ const PREVIEW_DELAY = 150;
 const TOKEN_KEY = 'notepad_token';
 const LAST_TAB_KEY = 'notepad_last_tab';
 const VIEW_KEY = 'notepad_view';
+const LEGACY_TABS = { notebook1: '翠', notebook2: '梅贝儿', notebook3: '爱利希雅' };
 const draftKey = (nb) => `notepad_draft:${nb}`;
 
 const $ = (id) => document.getElementById(id);
@@ -404,7 +405,7 @@ async function renameNotebook(oldName) {
 }
 
 async function deleteNotebook(name) {
-    if (!confirm(`确定删除「${name}」？（会在历史目录保留一份快照）`)) return;
+    if (!confirm(`确定删除「${name}」？内容和全部历史都会被删除，无法恢复。`)) return;
     const { res, data } = await api(`/notebooks/${encodeURIComponent(name)}`, { method: 'DELETE' });
     if (!res.ok) { alert(data.message || '删除失败'); return; }
     clearDraft(name);
@@ -422,35 +423,79 @@ tabAddBtn.addEventListener('click', createNotebook);
 const historyPanel = $('history-panel');
 const historyList = $('history-list');
 let historySelected = null;
+let historySelectedId = null;
 
-$('history-toggle').addEventListener('click', async () => {
-    if (!historyPanel.hidden) { historyPanel.hidden = true; return; }
-    await flushSave();
+function formatHistoryId(id) {
+    const m = id.match(/^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})/);
+    return m ? `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}:${m[6]}` : id;
+}
+
+async function loadHistoryPanel() {
     const { res, data } = await api(`/history/${encodeURIComponent(currentNotebook)}`);
     historyList.innerHTML = '';
     $('history-preview').hidden = true;
+    historySelected = null;
+    historySelectedId = null;
     if (!res.ok) return;
     if (!data.history.length) {
         historyList.innerHTML = '<li class="muted">还没有历史版本</li>';
+        return;
     }
     data.history.forEach((h) => {
         const li = document.createElement('li');
-        const m = h.id.match(/^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})/);
-        li.textContent = m ? `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}:${m[6]}  (${h.size} B)` : h.id;
+        const label = document.createElement('span');
+        label.className = 'hist-label';
+        label.textContent = `${formatHistoryId(h.id)}  (${h.size} B)`;
+        const del = document.createElement('button');
+        del.className = 'hist-del';
+        del.type = 'button';
+        del.title = '删除此条';
+        del.textContent = '×';
+        del.addEventListener('click', (e) => {
+            e.stopPropagation();
+            deleteHistoryItem(h.id);
+        });
+        li.append(label, del);
         li.addEventListener('click', async () => {
             historyList.querySelectorAll('li').forEach((el) => el.classList.remove('active'));
             li.classList.add('active');
             const r = await api(`/history/${encodeURIComponent(currentNotebook)}/${h.id}`);
             if (!r.res.ok) return;
             historySelected = r.data.content;
+            historySelectedId = h.id;
             $('history-content').textContent = historySelected;
             $('history-preview').hidden = false;
         });
         historyList.appendChild(li);
     });
+}
+
+async function deleteHistoryItem(id) {
+    if (!confirm('确定删除这条历史？删除后无法恢复。')) return;
+    const { res, data } = await api(`/history/${encodeURIComponent(currentNotebook)}/${id}`, { method: 'DELETE' });
+    if (!res.ok) { alert(data.message || '删除失败'); return; }
+    setStatus('已删除一条历史');
+    await loadHistoryPanel();
+}
+
+$('history-toggle').addEventListener('click', async () => {
+    if (!historyPanel.hidden) { historyPanel.hidden = true; return; }
+    await flushSave();
+    await loadHistoryPanel();
     historyPanel.hidden = false;
 });
 $('history-close').addEventListener('click', () => { historyPanel.hidden = true; });
+$('history-clear').addEventListener('click', async () => {
+    if (!confirm('清空当前笔记本的全部历史？删除后无法恢复。')) return;
+    const { res, data } = await api(`/history/${encodeURIComponent(currentNotebook)}`, { method: 'DELETE' });
+    if (!res.ok) { alert(data.message || '清空失败'); return; }
+    setStatus('已清空历史');
+    await loadHistoryPanel();
+});
+$('history-delete').addEventListener('click', () => {
+    if (!historySelectedId) return;
+    deleteHistoryItem(historySelectedId);
+});
 $('history-restore').addEventListener('click', () => {
     if (historySelected === null) return;
     if (!confirm('用此历史版本覆盖当前内容？（当前内容会先存入历史）')) return;
@@ -470,8 +515,15 @@ $('history-restore').addEventListener('click', () => {
         setStatus('无法获取笔记本列表：' + e.message, 'error');
         return;
     }
-    const fromHash = decodeURIComponent(location.hash.slice(1));
-    const remembered = localStorage.getItem(LAST_TAB_KEY);
+    // 旧名称的本地草稿跟着改名迁移
+    for (const [oldName, newName] of Object.entries(LEGACY_TABS)) {
+        const d = localStorage.getItem(draftKey(oldName));
+        if (d && !localStorage.getItem(draftKey(newName))) localStorage.setItem(draftKey(newName), d);
+        if (d) localStorage.removeItem(draftKey(oldName));
+    }
+    const fromHash = LEGACY_TABS[decodeURIComponent(location.hash.slice(1))] || decodeURIComponent(location.hash.slice(1));
+    const rememberedRaw = localStorage.getItem(LAST_TAB_KEY);
+    const remembered = LEGACY_TABS[rememberedRaw] || rememberedRaw;
     const pick = [fromHash, remembered].find((n) => n && notebooks.some((nb) => nb.name === n)) || notebooks[0].name;
     currentNotebook = pick;
     localStorage.setItem(LAST_TAB_KEY, pick);

@@ -13,7 +13,12 @@ NOTES_DIR = os.environ.get('NOTES_DIR', os.path.join(BASE_DIR, 'notes'))
 HISTORY_DIR = os.path.join(NOTES_DIR, '.history')
 HISTORY_KEEP = int(os.environ.get('HISTORY_KEEP', '20'))
 TOKEN = os.environ.get('NOTEPAD_TOKEN', '')
-DEFAULT_NOTEBOOKS = ['notebook1', 'notebook2', 'notebook3']
+DEFAULT_NOTEBOOKS = ['翠', '梅贝儿', '爱利希雅']
+LEGACY_RENAME = {
+    'notebook1': '翠',
+    'notebook2': '梅贝儿',
+    'notebook3': '爱利希雅',
+}
 
 NOTEBOOK_RE = re.compile(r'^[a-zA-Z0-9_\-\u4e00-\u9fa5]{1,64}$')
 
@@ -50,7 +55,7 @@ def note_version(path):
 
 def read_note(path):
     try:
-        with open(path, 'r', encoding='utf-8', newline='') as f:
+        with open(path, 'r', encoding='utf-8-sig', newline='') as f:
             return f.read()
     except FileNotFoundError:
         return ''
@@ -89,7 +94,25 @@ def snapshot(notebook):
         os.unlink(os.path.join(hist, old))
 
 
+def migrate_legacy_notebooks():
+    for old, new in LEGACY_RENAME.items():
+        src, dst = note_path(old), note_path(new)
+        if not os.path.exists(src) or os.path.exists(dst):
+            continue
+        os.replace(src, dst)
+        old_hist = os.path.join(HISTORY_DIR, old)
+        new_hist = os.path.join(HISTORY_DIR, new)
+        if os.path.isdir(old_hist):
+            if os.path.isdir(new_hist):
+                for fn in os.listdir(old_hist):
+                    os.replace(os.path.join(old_hist, fn), os.path.join(new_hist, fn))
+                os.rmdir(old_hist)
+            else:
+                os.replace(old_hist, new_hist)
+
+
 def list_notebooks():
+    migrate_legacy_notebooks()
     names = []
     for fn in os.listdir(NOTES_DIR):
         if fn.endswith('.txt') and NOTEBOOK_RE.match(fn[:-4]):
@@ -98,7 +121,8 @@ def list_notebooks():
         for n in DEFAULT_NOTEBOOKS:
             atomic_write(note_path(n), '')
         names = list(DEFAULT_NOTEBOOKS)
-    names.sort(key=lambda s: (len(s), s) if s.startswith('notebook') else (999, s))
+    order = {n: i for i, n in enumerate(DEFAULT_NOTEBOOKS)}
+    names.sort(key=lambda s: (order.get(s, 999), s))
     result = []
     for n in names:
         p = note_path(n)
@@ -193,8 +217,9 @@ def delete_notebook(notebook):
         return err('笔记本不存在', 404)
     if len(list_notebooks()) <= 1:
         return err('至少保留一个笔记本')
-    snapshot(notebook)  # 删除前留一份历史
     os.unlink(p)
+    # 历史一起清掉，避免敏感内容残留在没有入口的目录里
+    shutil.rmtree(os.path.join(HISTORY_DIR, notebook), ignore_errors=True)
     return ok()
 
 
@@ -211,7 +236,7 @@ def save_note():
     data = request.get_json(silent=True)
     if data is None:
         return err('请求体必须是 JSON')
-    notebook = data.get('notebook', 'notebook1')
+    notebook = data.get('notebook', DEFAULT_NOTEBOOKS[0])
     content = data.get('content', '')
     client_version = data.get('version')
     force = bool(data.get('force'))
@@ -250,14 +275,43 @@ def history_list(notebook):
     return ok(history=items)
 
 
+def history_file(notebook, hid):
+    if not valid_name(notebook) or not re.match(r'^[0-9\-]{1,32}$', hid):
+        return None
+    return os.path.join(HISTORY_DIR, notebook, f'{hid}.txt')
+
+
 @app.route('/history/<notebook>/<hid>', methods=['GET'])
 def history_get(notebook, hid):
-    if not valid_name(notebook) or not re.match(r'^[0-9\-]{1,32}$', hid):
+    p = history_file(notebook, hid)
+    if p is None:
         return err('非法参数')
-    p = os.path.join(HISTORY_DIR, notebook, f'{hid}.txt')
     if not os.path.exists(p):
         return err('历史版本不存在', 404)
     return ok(content=read_note(p))
+
+
+@app.route('/history/<notebook>/<hid>', methods=['DELETE'])
+def history_delete(notebook, hid):
+    p = history_file(notebook, hid)
+    if p is None:
+        return err('非法参数')
+    if not os.path.exists(p):
+        return err('历史版本不存在', 404)
+    os.unlink(p)
+    return ok()
+
+
+@app.route('/history/<notebook>', methods=['DELETE'])
+def history_clear(notebook):
+    if not valid_name(notebook):
+        return err('非法的笔记本名称')
+    hist = os.path.join(HISTORY_DIR, notebook)
+    if os.path.isdir(hist):
+        for fn in os.listdir(hist):
+            if fn.endswith('.txt'):
+                os.unlink(os.path.join(hist, fn))
+    return ok()
 
 
 if __name__ == '__main__':

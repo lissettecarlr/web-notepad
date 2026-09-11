@@ -62,12 +62,18 @@
     <div id="history-panel" class="side-panel" hidden>
         <div class="side-panel-header">
             <strong>历史版本</strong>
-            <button id="history-close" class="control-btn">✕</button>
+            <div class="side-panel-actions">
+                <button id="history-clear" class="control-btn" title="清空全部历史">清空</button>
+                <button id="history-close" class="control-btn">✕</button>
+            </div>
         </div>
         <ul id="history-list"></ul>
         <div id="history-preview" class="history-preview" hidden>
             <pre id="history-content"></pre>
-            <button id="history-restore" class="control-btn">恢复到此版本</button>
+            <div class="history-preview-actions">
+                <button id="history-restore" class="control-btn">恢复到此版本</button>
+                <button id="history-delete" class="control-btn danger">删除此条</button>
+            </div>
         </div>
     </div>
 </body>

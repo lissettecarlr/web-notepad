@@ -9,7 +9,12 @@
 // 注意：KV 是最终一致的，多端并发编辑时冲突检测是"尽力而为"。
 
 const NOTEBOOK_RE = /^[a-zA-Z0-9_\-\u4e00-\u9fa5]{1,64}$/;
-const DEFAULT_NOTEBOOKS = ['notebook1', 'notebook2', 'notebook3'];
+const DEFAULT_NOTEBOOKS = ['翠', '梅贝儿', '爱利希雅'];
+const LEGACY_RENAME = {
+  notebook1: '翠',
+  notebook2: '梅贝儿',
+  notebook3: '爱利希雅',
+};
 const MAX_NOTE_BYTES = 5 * 1024 * 1024;
 
 const json = (payload, status = 200, extraHeaders = {}) =>
@@ -89,7 +94,25 @@ async function snapshot(env, name, content) {
   await Promise.all(excess.map((k) => env.NOTES_KV.delete(k)));
 }
 
+async function renameNote(env, oldName, newName) {
+  const cur = await readNote(env, oldName);
+  if (!cur.exists) return false;
+  if ((await env.NOTES_KV.get(noteKey(newName))) !== null) return false;
+  await writeNote(env, newName, cur.content);
+  await env.NOTES_KV.delete(noteKey(oldName));
+  const hist = await env.NOTES_KV.list({ prefix: histPrefix(oldName) });
+  for (const k of hist.keys) {
+    const v = await env.NOTES_KV.get(k.name);
+    if (v !== null) await env.NOTES_KV.put(k.name.replace(histPrefix(oldName), histPrefix(newName)), v);
+    await env.NOTES_KV.delete(k.name);
+  }
+  return true;
+}
+
 async function listNotebooks(env) {
+  for (const [oldName, newName] of Object.entries(LEGACY_RENAME)) {
+    await renameNote(env, oldName, newName);
+  }
   const list = await env.NOTES_KV.list({ prefix: 'note:' });
   let items = list.keys.map((k) => ({
     name: k.name.slice(5),
@@ -97,7 +120,6 @@ async function listNotebooks(env) {
     size: k.metadata?.size ?? 0,
   }));
   if (!items.length) {
-    // 尝试迁移旧的裸 key，否则创建默认笔记本
     for (const n of DEFAULT_NOTEBOOKS) {
       const legacy = await env.NOTES_KV.get(n);
       const version = await writeNote(env, n, legacy ?? '');
@@ -105,11 +127,8 @@ async function listNotebooks(env) {
       items.push({ name: n, version, size: (legacy ?? '').length });
     }
   }
-  items.sort((a, b) => {
-    const pa = a.name.startsWith('notebook') ? [a.name.length, a.name] : [999, a.name];
-    const pb = b.name.startsWith('notebook') ? [b.name.length, b.name] : [999, b.name];
-    return pa[0] - pb[0] || (pa[1] < pb[1] ? -1 : pa[1] > pb[1] ? 1 : 0);
-  });
+  const order = Object.fromEntries(DEFAULT_NOTEBOOKS.map((n, i) => [n, i]));
+  items.sort((a, b) => (order[a.name] ?? 999) - (order[b.name] ?? 999) || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
   return items;
 }
 
@@ -168,8 +187,10 @@ async function handle(request, env) {
       const cur = await readNote(env, name);
       if (!cur.exists) return err('笔记本不存在', 404);
       if ((await listNotebooks(env)).length <= 1) return err('至少保留一个笔记本');
-      await snapshot(env, name, cur.content);
       await env.NOTES_KV.delete(noteKey(name));
+      // 历史一起清掉，避免敏感内容残留
+      const hist = await env.NOTES_KV.list({ prefix: histPrefix(name) });
+      await Promise.all(hist.keys.map((k) => env.NOTES_KV.delete(k.name)));
       return ok();
     }
   }
@@ -186,7 +207,7 @@ async function handle(request, env) {
   if (path === '/save' && method === 'POST') {
     const body = await readBody();
     if (!body) return err('请求体必须是 JSON');
-    const { notebook = 'notebook1', content = '', version: clientVersion = null, force = false } = body;
+    const { notebook = DEFAULT_NOTEBOOKS[0], content = '', version: clientVersion = null, force = false } = body;
     if (!validName(notebook)) return err('非法的笔记本名称');
     if (typeof content !== 'string') return err('content 必须是字符串');
     if (content.length > MAX_NOTE_BYTES) return err('内容过大', 413);
@@ -202,22 +223,38 @@ async function handle(request, env) {
     return ok({ version });
   }
 
-  // GET /history/<name>  /history/<name>/<id>
-  if (segs[0] === 'history' && (segs.length === 2 || segs.length === 3) && method === 'GET') {
+  // GET/DELETE /history/<name>  GET/DELETE /history/<name>/<id>
+  if (segs[0] === 'history' && (segs.length === 2 || segs.length === 3)) {
     const name = segs[1];
     if (!validName(name)) return err('非法的笔记本名称');
-    if (segs.length === 2) {
+    if (segs.length === 2 && method === 'GET') {
       const list = await env.NOTES_KV.list({ prefix: histPrefix(name) });
       const history = list.keys
         .map((k) => ({ id: k.name.slice(histPrefix(name).length), size: 0 }))
         .sort((a, b) => (a.id < b.id ? 1 : -1));
       return ok({ history });
     }
-    const id = segs[2];
-    if (!/^[0-9\-]{1,32}$/.test(id)) return err('非法参数');
-    const content = await env.NOTES_KV.get(`${histPrefix(name)}${id}`);
-    if (content === null) return err('历史版本不存在', 404);
-    return ok({ content });
+    if (segs.length === 2 && method === 'DELETE') {
+      const list = await env.NOTES_KV.list({ prefix: histPrefix(name) });
+      await Promise.all(list.keys.map((k) => env.NOTES_KV.delete(k.name)));
+      return ok();
+    }
+    if (segs.length === 3) {
+      const id = segs[2];
+      if (!/^[0-9\-]{1,32}$/.test(id)) return err('非法参数');
+      const key = `${histPrefix(name)}${id}`;
+      if (method === 'GET') {
+        const content = await env.NOTES_KV.get(key);
+        if (content === null) return err('历史版本不存在', 404);
+        return ok({ content });
+      }
+      if (method === 'DELETE') {
+        const content = await env.NOTES_KV.get(key);
+        if (content === null) return err('历史版本不存在', 404);
+        await env.NOTES_KV.delete(key);
+        return ok();
+      }
+    }
   }
 
   return err('Not Found', 404);
