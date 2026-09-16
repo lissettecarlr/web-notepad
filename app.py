@@ -1,3 +1,4 @@
+import hashlib
 import hmac
 import os
 import re
@@ -214,9 +215,16 @@ def check_auth():
 
 
 @app.after_request
-def no_cache(resp):
-    if request.path.startswith(('/load/', '/notebooks', '/history/', '/bootstrap')):
+def cache_headers(resp):
+    p = request.path
+    if p.startswith(('/load/', '/notebooks', '/history/', '/bootstrap')):
         resp.headers['Cache-Control'] = 'no-store'
+    elif p == '/' or p == '/index.html':
+        # 首页每次都回源校验，保证拿到带新哈希的资源地址
+        resp.headers['Cache-Control'] = 'no-cache'
+    elif p in ('/script.js', '/style.css') and request.args.get('v'):
+        # 地址里带内容哈希，可以放心长期缓存；内容一变地址就变
+        resp.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
     return resp
 
 
@@ -227,9 +235,23 @@ def too_large(_):
 
 # ---------- routes ----------
 
+def asset_hash(name):
+    with open(os.path.join(PUBLIC_DIR, name), 'rb') as f:
+        return hashlib.sha256(f.read()).hexdigest()[:10]
+
+
+# 启动时把 index.html 里的 /script.js、/style.css 换成带内容哈希的地址，
+# 避免浏览器拿新 HTML 配旧脚本（曾导致编辑框一直只读）。
+with open(os.path.join(PUBLIC_DIR, 'index.html'), encoding='utf-8') as _f:
+    INDEX_HTML = _f.read()
+for _asset in ('script.js', 'style.css'):
+    INDEX_HTML = INDEX_HTML.replace(f'"/{_asset}"', f'"/{_asset}?v={asset_hash(_asset)}"')
+
+
 @app.route('/')
 def index():
-    return send_from_directory(PUBLIC_DIR, 'index.html')
+    resp = app.response_class(INDEX_HTML, mimetype='text/html')
+    return resp
 
 
 @app.route('/notebooks', methods=['GET'])
