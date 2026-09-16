@@ -70,10 +70,31 @@ async function api(path, options = {}, retry = true) {
 function applyTheme(theme) {
     html.setAttribute('data-theme', theme);
     localStorage.setItem('theme', theme);
+    // 手机浏览器地址栏 / PWA 状态栏颜色跟随主题
+    document.querySelectorAll('meta[name="theme-color"]').forEach((m) => {
+        m.setAttribute('content', theme === 'dark' ? '#1a1a1a' : '#ffffff');
+    });
 }
 applyTheme(localStorage.getItem('theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
 themeToggle.addEventListener('click', () => {
     applyTheme(html.getAttribute('data-theme') === 'light' ? 'dark' : 'light');
+});
+
+// ---------- 复制全部 ----------
+$('copy-all').addEventListener('click', async () => {
+    const text = notepad.value;
+    if (!text) { setStatus('没有内容可复制'); return; }
+    try {
+        await navigator.clipboard.writeText(text);
+        setStatus('已复制全部内容');
+    } catch {
+        // 不支持 clipboard API（如非 HTTPS）时退回选中 + execCommand
+        notepad.focus();
+        notepad.select();
+        const okCopy = document.execCommand && document.execCommand('copy');
+        notepad.setSelectionRange(notepad.value.length, notepad.value.length);
+        setStatus(okCopy ? '已复制全部内容' : '复制失败，请手动选择', okCopy ? '' : 'error');
+    }
 });
 
 // ---------- 草稿 ----------

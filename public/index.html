@@ -3,8 +3,14 @@
 <head>
     <meta charset="utf-8">
     <title>在线记事本</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
+    <meta name="theme-color" content="#ffffff">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="记事本">
+    <link rel="manifest" href="/manifest.json">
     <link rel="icon" href="/favicon.ico">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
     <link rel="stylesheet" href="/style.css">
     <script src="/script.js" defer></script>
 </head>
@@ -13,6 +19,7 @@
         <div class="header">
             <h1>在线记事本</h1>
             <div class="header-buttons">
+                <button id="copy-all" class="control-btn" title="复制全部内容">复制</button>
                 <button id="history-toggle" class="control-btn" title="历史版本">历史</button>
                 <button id="theme-toggle" class="control-btn" title="切换主题">
                     <span class="light-icon">深色</span>
