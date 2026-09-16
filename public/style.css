@@ -204,6 +204,12 @@ body {
     border-color: var(--accent);
 }
 
+#notepad[readonly] {
+    background-color: var(--tab-bg);
+    color: var(--status-color);
+    cursor: not-allowed;
+}
+
 /* 状态栏 */
 .status-bar {
     display: flex;

@@ -113,30 +113,60 @@ function checkDraft(nb, serverContent) {
 }
 
 // ---------- 加载 / 保存 ----------
+// 同步优先：没从服务端拿到最新内容之前，禁止编辑
+function lockEditor(reason) {
+    notepad.readOnly = true;
+    notepad.placeholder = reason || '正在同步…';
+}
+
+function unlockEditor() {
+    notepad.readOnly = false;
+    notepad.placeholder = '在这里输入内容…（Ctrl+S 立即保存，Tab 缩进）';
+    $('load-banner').hidden = true;
+}
+
+function showLoadFailure(message) {
+    lockEditor('同步失败，已禁止编辑');
+    $('load-banner-text').textContent = `同步失败：${message}。为避免覆盖其他设备上的内容，已禁止编辑。`;
+    $('load-banner').hidden = false;
+    setStatus('同步失败', 'error');
+}
+
 async function loadNotebook(nb) {
     if (loadAbort) loadAbort.abort();
     loadAbort = new AbortController();
     $('conflict-banner').hidden = true;
     $('draft-banner').hidden = true;
-    setStatus('正在加载…');
+    $('load-banner').hidden = true;
+    lockEditor('正在同步…');
+    notepad.value = '';
+    dirty = false;
+    setStatus('正在同步…');
     try {
         const { res, data } = await api(`/load/${encodeURIComponent(nb)}`, { signal: loadAbort.signal });
         if (nb !== currentNotebook) return;
         if (!res.ok || data.status !== 'success') {
-            setStatus('加载失败：' + (data.message || res.status), 'error');
+            showLoadFailure(data.message || `HTTP ${res.status}`);
             return;
         }
         notepad.value = data.content;
         currentVersion = data.version;
         dirty = false;
-        setStatus('加载完成');
+        unlockEditor();
+        setStatus('已同步');
         updateStats();
+        if (matchMedia('(pointer: fine)').matches) notepad.focus();
         checkDraft(nb, data.content);
     } catch (e) {
         if (e.name === 'AbortError') return;
-        setStatus('加载出错：' + e.message, 'error');
+        if (nb !== currentNotebook) return;
+        showLoadFailure(e.message || '网络错误');
     }
 }
+
+$('load-retry').addEventListener('click', () => {
+    if (currentNotebook) loadNotebook(currentNotebook);
+});
 
 function markDirty() {
     dirty = true;
@@ -244,7 +274,7 @@ notepad.addEventListener('input', () => {
 });
 
 notepad.addEventListener('keydown', (e) => {
-    if (e.key === 'Tab') {
+    if (e.key === 'Tab' && !notepad.readOnly) {
         e.preventDefault();
         indentSelection(e.shiftKey);
         notepad.dispatchEvent(new Event('input'));
@@ -467,13 +497,18 @@ $('history-restore').addEventListener('click', () => {
 });
 
 // ---------- 启动 ----------
-(async function init() {
+async function init() {
+    lockEditor('正在同步…');
     try {
         await refreshNotebooks();
     } catch (e) {
-        setStatus('无法获取笔记本列表：' + e.message, 'error');
+        $('load-banner-text').textContent = `无法连接服务器：${e.message}。为避免覆盖其他设备上的内容，已禁止编辑。`;
+        $('load-banner').hidden = false;
+        $('load-retry').onclick = () => { $('load-banner').hidden = true; init(); };
+        setStatus('同步失败', 'error');
         return;
     }
+    $('load-retry').onclick = null;
     // 旧名称的本地草稿跟着改名迁移
     for (const [oldName, newName] of Object.entries(LEGACY_TABS)) {
         const d = localStorage.getItem(draftKey(oldName));
@@ -489,4 +524,6 @@ $('history-restore').addEventListener('click', () => {
     history.replaceState(null, '', `#${encodeURIComponent(pick)}`);
     renderTabs();
     await loadNotebook(pick);
-})();
+}
+
+init();

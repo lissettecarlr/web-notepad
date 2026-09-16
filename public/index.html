@@ -25,13 +25,18 @@
                 <button id="tab-add" class="tab-btn tab-add" title="新建笔记本">＋</button>
             </div>
             <div class="editor-container">
-                <textarea id="notepad" placeholder="在这里输入内容…（Ctrl+S 立即保存，Tab 缩进）" spellcheck="false"></textarea>
+                <textarea id="notepad" placeholder="正在同步…" spellcheck="false" readonly></textarea>
             </div>
             <div class="status-bar">
                 <span id="status"></span>
                 <span id="stats"></span>
             </div>
         </div>
+    </div>
+
+    <div id="load-banner" class="banner" hidden>
+        <span id="load-banner-text">同步失败，已禁止编辑。</span>
+        <button id="load-retry" class="control-btn">重试</button>
     </div>
 
     <div id="conflict-banner" class="banner" hidden>
