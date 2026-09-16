@@ -3,7 +3,6 @@
 .dockerignore
 images
 notes
-worker
 README.md
 LICENSE
 docker-compose.yml

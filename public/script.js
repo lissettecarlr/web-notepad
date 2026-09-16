@@ -1,7 +1,8 @@
-// 同源部署时留空；前端与 API 分离部署时填 Worker 地址，如 'https://notebook-api.xxx.workers.dev'
+// 同源部署留空；前后端分离部署时填后端地址
 const API_BASE_URL = '';
 
-const AUTOSAVE_DELAY = 2000;
+const AUTOSAVE_DELAY = 800;
+const RESYNC_MIN_INTERVAL = 2000; // 切回页面触发重新同步的最小间隔
 const TOKEN_KEY = 'notepad_token';
 const LAST_TAB_KEY = 'notepad_last_tab';
 const LEGACY_TABS = { notebook1: '翠', notebook2: '梅贝儿', notebook3: '爱利希雅' };
@@ -153,7 +154,19 @@ function showLoadFailure(message) {
     setStatus('同步失败', 'error');
 }
 
-async function loadNotebook(nb) {
+// 把服务端返回的内容应用到编辑器并解锁
+function applyLoaded(nb, data) {
+    notepad.value = data.content;
+    currentVersion = data.version;
+    dirty = false;
+    unlockEditor();
+    setStatus('已同步');
+    updateStats();
+    if (matchMedia('(pointer: fine)').matches) notepad.focus();
+    checkDraft(nb, data.content);
+}
+
+function beginLoading() {
     if (loadAbort) loadAbort.abort();
     loadAbort = new AbortController();
     $('conflict-banner').hidden = true;
@@ -163,21 +176,19 @@ async function loadNotebook(nb) {
     notepad.value = '';
     dirty = false;
     setStatus('正在同步…');
+    return loadAbort.signal;
+}
+
+async function loadNotebook(nb) {
+    const signal = beginLoading();
     try {
-        const { res, data } = await api(`/load/${encodeURIComponent(nb)}`, { signal: loadAbort.signal });
+        const { res, data } = await api(`/load/${encodeURIComponent(nb)}`, { signal });
         if (nb !== currentNotebook) return;
         if (!res.ok || data.status !== 'success') {
             showLoadFailure(data.message || `HTTP ${res.status}`);
             return;
         }
-        notepad.value = data.content;
-        currentVersion = data.version;
-        dirty = false;
-        unlockEditor();
-        setStatus('已同步');
-        updateStats();
-        if (matchMedia('(pointer: fine)').matches) notepad.focus();
-        checkDraft(nb, data.content);
+        applyLoaded(nb, data);
     } catch (e) {
         if (e.name === 'AbortError') return;
         if (nb !== currentNotebook) return;
@@ -188,6 +199,41 @@ async function loadNotebook(nb) {
 $('load-retry').addEventListener('click', () => {
     if (currentNotebook) loadNotebook(currentNotebook);
 });
+
+// 切回页面时静默重新同步：本地没有未保存修改才做，避免覆盖正在输入的内容
+let lastResyncAt = 0;
+let resyncing = false;
+
+async function resyncIfIdle() {
+    if (!currentNotebook || dirty || saving || saveTimer || resyncing) return;
+    if (Date.now() - lastResyncAt < RESYNC_MIN_INTERVAL) return;
+    if (!$('load-banner').hidden) { loadNotebook(currentNotebook); return; } // 之前失败过，直接重试
+    if (notepad.readOnly) return; // 正在首次加载
+    lastResyncAt = Date.now();
+    resyncing = true;
+    const nb = currentNotebook;
+    try {
+        const { res, data } = await api(`/load/${encodeURIComponent(nb)}`);
+        if (nb !== currentNotebook || dirty || saving) return; // 期间用户动了
+        if (!res.ok || data.status !== 'success') return;      // 静默失败，不打扰
+        if (data.version !== currentVersion) {
+            const pos = notepad.selectionStart;
+            notepad.value = data.content;
+            currentVersion = data.version;
+            notepad.setSelectionRange(Math.min(pos, notepad.value.length), Math.min(pos, notepad.value.length));
+            updateStats();
+            setStatus('已同步最新内容 - ' + new Date().toLocaleTimeString());
+        }
+    } catch { /* 静默 */ } finally {
+        resyncing = false;
+    }
+}
+
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') resyncIfIdle();
+});
+window.addEventListener('focus', resyncIfIdle);
+window.addEventListener('online', resyncIfIdle);
 
 function markDirty() {
     dirty = true;
@@ -519,17 +565,6 @@ $('history-restore').addEventListener('click', () => {
 
 // ---------- 启动 ----------
 async function init() {
-    lockEditor('正在同步…');
-    try {
-        await refreshNotebooks();
-    } catch (e) {
-        $('load-banner-text').textContent = `无法连接服务器：${e.message}。为避免覆盖其他设备上的内容，已禁止编辑。`;
-        $('load-banner').hidden = false;
-        $('load-retry').onclick = () => { $('load-banner').hidden = true; init(); };
-        setStatus('同步失败', 'error');
-        return;
-    }
-    $('load-retry').onclick = null;
     // 旧名称的本地草稿跟着改名迁移
     for (const [oldName, newName] of Object.entries(LEGACY_TABS)) {
         const d = localStorage.getItem(draftKey(oldName));
@@ -538,13 +573,28 @@ async function init() {
     }
     const fromHash = LEGACY_TABS[decodeURIComponent(location.hash.slice(1))] || decodeURIComponent(location.hash.slice(1));
     const rememberedRaw = localStorage.getItem(LAST_TAB_KEY);
-    const remembered = LEGACY_TABS[rememberedRaw] || rememberedRaw;
-    const pick = [fromHash, remembered].find((n) => n && notebooks.some((nb) => nb.name === n)) || notebooks[0].name;
-    currentNotebook = pick;
-    localStorage.setItem(LAST_TAB_KEY, pick);
-    history.replaceState(null, '', `#${encodeURIComponent(pick)}`);
-    renderTabs();
-    await loadNotebook(pick);
+    const want = fromHash || LEGACY_TABS[rememberedRaw] || rememberedRaw || '';
+
+    // 一次请求拿到列表 + 内容
+    const signal = beginLoading();
+    $('load-retry').onclick = () => { $('load-banner').hidden = true; init(); };
+    try {
+        const { res, data } = await api(`/bootstrap?notebook=${encodeURIComponent(want)}`, { signal });
+        if (!res.ok || data.status !== 'success') {
+            showLoadFailure(data.message || `HTTP ${res.status}`);
+            return;
+        }
+        notebooks = data.notebooks;
+        currentNotebook = data.notebook;
+        localStorage.setItem(LAST_TAB_KEY, currentNotebook);
+        history.replaceState(null, '', `#${encodeURIComponent(currentNotebook)}`);
+        renderTabs();
+        applyLoaded(currentNotebook, data);
+        $('load-retry').onclick = null; // 之后的重试走 loadNotebook
+    } catch (e) {
+        if (e.name === 'AbortError') return;
+        showLoadFailure(e.message || '网络错误');
+    }
 }
 
 init();

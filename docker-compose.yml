@@ -10,6 +10,8 @@ services:
     environment:
       # 访问令牌，留空则不鉴权（仅建议内网使用）
       NOTEPAD_TOKEN: ""
+      # 放在 nginx / Caddy / Cloudflare 等反向代理后面时设为 "1"，令牌限速才能拿到真实客户端 IP
+      BEHIND_PROXY: "0"
       # 历史快照保留份数
       HISTORY_KEEP: "20"
       # 单篇笔记大小上限（字节）

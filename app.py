@@ -3,9 +3,11 @@ import os
 import re
 import shutil
 import tempfile
+import threading
 import time
 
 from flask import Flask, jsonify, request, send_from_directory
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PUBLIC_DIR = os.path.join(BASE_DIR, 'public')
@@ -26,6 +28,12 @@ os.makedirs(HISTORY_DIR, exist_ok=True)
 
 app = Flask(__name__, static_folder=PUBLIC_DIR, static_url_path='')
 app.config['MAX_CONTENT_LENGTH'] = int(os.environ.get('MAX_NOTE_BYTES', str(5 * 1024 * 1024)))
+
+# 放在 nginx / Caddy / Cloudflare 等反向代理后面时设 BEHIND_PROXY=1，
+# 让限速用 X-Forwarded-For 里的真实客户端 IP，而不是代理 IP。
+# 直接暴露公网时不要开，否则客户端可伪造头绕过限速。
+if os.environ.get('BEHIND_PROXY', '0') == '1':
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 
 # ---------- helpers ----------
@@ -137,6 +145,50 @@ def valid_name(name):
 
 # ---------- auth ----------
 
+# 令牌错误限速：同一 IP 连续失败 AUTH_MAX_FAILS 次后锁定 AUTH_LOCK_SECONDS 秒。
+# 进程内存级实现，gunicorn 多 worker 时按 worker 独立计数（效果打折，但足够拦住慢速穷举）。
+AUTH_MAX_FAILS = int(os.environ.get('AUTH_MAX_FAILS', '5'))
+AUTH_LOCK_SECONDS = int(os.environ.get('AUTH_LOCK_SECONDS', '60'))
+_auth_fails = {}  # ip -> [fail_count, locked_until_ts]
+_auth_lock = threading.Lock()
+
+
+def client_ip():
+    return request.remote_addr or 'unknown'
+
+
+def auth_locked(ip):
+    with _auth_lock:
+        rec = _auth_fails.get(ip)
+        if not rec:
+            return 0
+        remaining = rec[1] - time.time()
+        if remaining > 0:
+            return int(remaining) + 1
+        if rec[1]:
+            _auth_fails.pop(ip, None)  # 锁过期，清零
+        return 0
+
+
+def auth_record_failure(ip):
+    with _auth_lock:
+        rec = _auth_fails.setdefault(ip, [0, 0])
+        rec[0] += 1
+        if rec[0] >= AUTH_MAX_FAILS:
+            rec[1] = time.time() + AUTH_LOCK_SECONDS
+            rec[0] = 0
+        # 防止字典无限增长
+        if len(_auth_fails) > 10000:
+            now = time.time()
+            for k in [k for k, v in _auth_fails.items() if v[1] and v[1] < now]:
+                _auth_fails.pop(k, None)
+
+
+def auth_record_success(ip):
+    with _auth_lock:
+        _auth_fails.pop(ip, None)
+
+
 @app.before_request
 def check_auth():
     if not TOKEN:
@@ -146,16 +198,24 @@ def check_auth():
     # 静态资源与首页放行
     if request.endpoint in ('index', 'static'):
         return None
+    ip = client_ip()
+    wait = auth_locked(ip)
+    if wait:
+        resp, _ = err(f'尝试次数过多，请 {wait} 秒后再试', 429)
+        resp.headers['Retry-After'] = str(wait)
+        return resp, 429
     header = request.headers.get('Authorization', '')
     supplied = header[7:] if header.startswith('Bearer ') else ''
     if not hmac.compare_digest(supplied, TOKEN):
+        auth_record_failure(ip)
         return err('未授权', 401)
+    auth_record_success(ip)
     return None
 
 
 @app.after_request
 def no_cache(resp):
-    if request.path.startswith(('/load/', '/notebooks', '/history/')):
+    if request.path.startswith(('/load/', '/notebooks', '/history/', '/bootstrap')):
         resp.headers['Cache-Control'] = 'no-store'
     return resp
 
@@ -175,6 +235,17 @@ def index():
 @app.route('/notebooks', methods=['GET'])
 def notebooks():
     return ok(notebooks=list_notebooks())
+
+
+@app.route('/bootstrap', methods=['GET'])
+def bootstrap():
+    """一次请求返回笔记本列表 + 目标笔记本内容，减少首屏往返。"""
+    nbs = list_notebooks()
+    want = request.args.get('notebook', '')
+    names = [n['name'] for n in nbs]
+    chosen = want if want in names else names[0]
+    p = note_path(chosen)
+    return ok(notebooks=nbs, notebook=chosen, content=read_note(p), version=note_version(p))
 
 
 @app.route('/notebooks', methods=['POST'])

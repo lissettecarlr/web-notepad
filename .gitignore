@@ -162,5 +162,3 @@ cython_debug/
 
 
 notes/
-worker/node_modules/
-worker/.wrangler/

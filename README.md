@@ -52,3 +52,16 @@ docker compose up -d
 ```bash
 docker run -d -p 12345:12345 -v $(pwd)/notes:/app/notes lissettecarlr/web-notepad:latest
 ```
+
+### 设置访问密码（放公网时建议开启）
+
+默认不需要密码，任何人拿到网址都能查看和修改笔记。放到公网上时，在 `docker-compose.yml` 里给 `NOTEPAD_TOKEN` 填一串随机字符：
+
+```yaml
+environment:
+  NOTEPAD_TOKEN: "换成你自己的随机字符串"
+```
+
+重启容器后，浏览器首次打开会弹窗要求输入这串字符，输一次即记住，之后不再询问。换设备或清除浏览器数据后重新输入即可。
+
+如果服务前面挂了 nginx / Caddy / Cloudflare 等反向代理，同时把 `BEHIND_PROXY` 设为 `"1"`。
