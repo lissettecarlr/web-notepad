@@ -15,6 +15,8 @@ PUBLIC_DIR = os.path.join(BASE_DIR, 'public')
 NOTES_DIR = os.environ.get('NOTES_DIR', os.path.join(BASE_DIR, 'notes'))
 HISTORY_DIR = os.path.join(NOTES_DIR, '.history')
 HISTORY_KEEP = int(os.environ.get('HISTORY_KEEP', '20'))
+# 距离最新一条快照不足这么多秒时不再新建快照，避免自动保存把历史刷成一分钟内的碎片
+SNAPSHOT_MIN_INTERVAL = int(os.environ.get('SNAPSHOT_MIN_INTERVAL', '600'))
 TOKEN = os.environ.get('NOTEPAD_TOKEN', '')
 DEFAULT_NOTEBOOKS = ['翠', '梅贝儿', '爱利希雅']
 LEGACY_RENAME = {
@@ -87,18 +89,28 @@ def atomic_write(path, text):
 
 
 def snapshot(notebook):
-    """保存前把旧内容存进历史目录，并裁剪到 HISTORY_KEEP 份。"""
+    """保存前把旧内容存进历史目录，并裁剪到 HISTORY_KEEP 份。
+
+    一个编辑会话内（最新快照距今 < SNAPSHOT_MIN_INTERVAL）不重复建快照，
+    这样每条历史大致对应“某次开始编辑之前的状态”。
+    """
     src = note_path(notebook)
     if not os.path.exists(src) or os.path.getsize(src) == 0:
         return
     hist = os.path.join(HISTORY_DIR, notebook)
     os.makedirs(hist, exist_ok=True)
     now = time.time()
+    existing = sorted(fn for fn in os.listdir(hist) if fn.endswith('.txt'))
+    if existing:
+        latest = os.path.join(hist, existing[-1])
+        if now - os.path.getmtime(latest) < SNAPSHOT_MIN_INTERVAL:
+            return
     # 固定宽度：YYYYmmdd-HHMMSS-微秒，保证按文件名排序即按时间排序
     ts = time.strftime('%Y%m%d-%H%M%S', time.localtime(now)) + f'-{int((now % 1) * 1_000_000):06d}'
     dst = os.path.join(hist, f'{ts}.txt')
     shutil.copy2(src, dst)
-    files = sorted(os.listdir(hist))
+    os.utime(dst, (now, now))  # mtime 记为快照时间，供上面的间隔判断使用
+    files = existing + [f'{ts}.txt']
     for old in files[:-HISTORY_KEEP] if len(files) > HISTORY_KEEP else []:
         os.unlink(os.path.join(hist, old))
 
@@ -147,7 +159,7 @@ def valid_name(name):
 # ---------- auth ----------
 
 # 令牌错误限速：同一 IP 连续失败 AUTH_MAX_FAILS 次后锁定 AUTH_LOCK_SECONDS 秒。
-# 进程内存级实现，gunicorn 多 worker 时按 worker 独立计数（效果打折，但足够拦住慢速穷举）。
+# 进程内存级实现；Dockerfile 里 gunicorn 是单 worker 多线程，计数是全局的。
 AUTH_MAX_FAILS = int(os.environ.get('AUTH_MAX_FAILS', '5'))
 AUTH_LOCK_SECONDS = int(os.environ.get('AUTH_LOCK_SECONDS', '60'))
 _auth_fails = {}  # ip -> [fail_count, locked_until_ts]
@@ -321,7 +333,11 @@ def load_note(notebook):
     if not valid_name(notebook):
         return err('非法的笔记本名称')
     p = note_path(notebook)
-    return ok(content=read_note(p), version=note_version(p))
+    version = note_version(p)
+    # 客户端带 if_version 且与当前一致：不传内容，省流量
+    if request.args.get('if_version') and request.args.get('if_version') == version:
+        return ok(version=version, unchanged=True)
+    return ok(content=read_note(p), version=version)
 
 
 @app.route('/save', methods=['POST'])
@@ -364,7 +380,13 @@ def history_list(notebook):
     if os.path.isdir(hist):
         for fn in sorted(os.listdir(hist), reverse=True):
             if fn.endswith('.txt'):
-                items.append({'id': fn[:-4], 'size': os.path.getsize(os.path.join(hist, fn))})
+                fp = os.path.join(hist, fn)
+                text = read_note(fp)
+                items.append({
+                    'id': fn[:-4],
+                    'ts': int(os.path.getmtime(fp)),
+                    'chars': len(re.sub(r'\s', '', text)),
+                })
     return ok(history=items)
 
 

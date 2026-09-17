@@ -2,6 +2,8 @@
 const API_BASE_URL = '';
 
 const AUTOSAVE_DELAY = 800;
+const DRAFT_DELAY = 300; // 本地草稿写入合并间隔
+const KEEPALIVE_LIMIT = 60 * 1024; // fetch keepalive 的请求体上限约 64KB
 const RESYNC_MIN_INTERVAL = 2000; // 切回页面触发重新同步的最小间隔
 const TOKEN_KEY = 'notepad_token';
 const LAST_TAB_KEY = 'notepad_last_tab';
@@ -99,8 +101,11 @@ $('copy-all').addEventListener('click', async () => {
 });
 
 // ---------- 草稿 ----------
-function saveDraft() {
-    if (!currentNotebook) return;
+let draftTimer = null;
+
+function writeDraft() {
+    draftTimer = null;
+    if (!currentNotebook || !dirty) return;
     try {
         localStorage.setItem(draftKey(currentNotebook), JSON.stringify({
             content: notepad.value,
@@ -110,7 +115,19 @@ function saveDraft() {
     } catch { /* 容量满了就算了 */ }
 }
 
+// 每次按键都同步写整篇到 localStorage 会卡，这里合并 300ms
+function saveDraft() {
+    if (draftTimer) return;
+    draftTimer = setTimeout(writeDraft, DRAFT_DELAY);
+}
+
+function flushDraft() {
+    if (draftTimer) { clearTimeout(draftTimer); draftTimer = null; }
+    writeDraft();
+}
+
 function clearDraft(nb = currentNotebook) {
+    if (nb === currentNotebook && draftTimer) { clearTimeout(draftTimer); draftTimer = null; }
     if (nb) localStorage.removeItem(draftKey(nb));
 }
 
@@ -213,10 +230,12 @@ async function resyncIfIdle() {
     resyncing = true;
     const nb = currentNotebook;
     try {
-        const { res, data } = await api(`/load/${encodeURIComponent(nb)}`);
+        const { res, data } = await api(
+            `/load/${encodeURIComponent(nb)}?if_version=${encodeURIComponent(currentVersion ?? '')}`,
+        );
         if (nb !== currentNotebook || dirty || saving) return; // 期间用户动了
         if (!res.ok || data.status !== 'success') return;      // 静默失败，不打扰
-        if (data.version !== currentVersion) {
+        if (!data.unchanged && data.version !== currentVersion) {
             const pos = notepad.selectionStart;
             notepad.value = data.content;
             currentVersion = data.version;
@@ -315,19 +334,49 @@ $('conflict-overwrite').addEventListener('click', () => {
     autoSave(true);
 });
 
-// 关闭页面前兜底保存
-window.addEventListener('pagehide', () => {
-    if (!dirty || !currentNotebook) return;
-    saveDraft();
+// 关闭页面 / 切后台时兜底保存。
+// 手机上按 Home 后定时器会被冻结、pagehide 不一定触发，visibilitychange(hidden) 最可靠。
+function beaconSave() {
+    if (!dirty || !currentNotebook || saving) return;
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+    flushDraft();
+    const nb = currentNotebook;
+    const content = notepad.value;
+    const body = JSON.stringify({ notebook: nb, content, version: currentVersion });
     const headers = { 'Content-Type': 'application/json' };
     const token = getToken();
     if (token) headers['Authorization'] = `Bearer ${token}`;
+    saving = true; // 复用 saving 标志，避免回到前台后 autoSave 并发写、版本错乱
     fetch(API_BASE_URL + '/save', {
         method: 'POST',
         headers,
-        keepalive: true,
-        body: JSON.stringify({ notebook: currentNotebook, content: notepad.value, version: currentVersion }),
-    }).catch(() => {});
+        body,
+        keepalive: body.length <= KEEPALIVE_LIMIT, // 超过上限 keepalive 会直接被拒，退回普通请求
+    })
+        .then((res) => res.json())
+        .then((data) => {
+            // 页面还活着（只是切了后台）时把结果记下来，回来后不用重复保存
+            if (data.status !== 'success' || nb !== currentNotebook) return;
+            currentVersion = data.version;
+            if (notepad.value === content) {
+                dirty = false;
+                clearDraft(nb);
+                setStatus('已保存 - ' + new Date().toLocaleTimeString());
+            }
+        })
+        .catch(() => {})
+        .finally(() => {
+            saving = false;
+            if (saveQueued || (dirty && nb === currentNotebook)) {
+                saveQueued = false;
+                scheduleSave(300);
+            }
+        });
+}
+
+window.addEventListener('pagehide', beaconSave);
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') beaconSave();
 });
 
 window.addEventListener('beforeunload', (e) => {
@@ -488,6 +537,15 @@ function formatHistoryId(id) {
     return m ? `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}:${m[6]}` : id;
 }
 
+function relativeTime(tsSec) {
+    const diff = Math.max(0, Date.now() / 1000 - tsSec);
+    if (diff < 60) return '刚刚';
+    if (diff < 3600) return `${Math.floor(diff / 60)} 分钟前`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)} 小时前`;
+    if (diff < 86400 * 30) return `${Math.floor(diff / 86400)} 天前`;
+    return new Date(tsSec * 1000).toLocaleDateString();
+}
+
 async function loadHistoryPanel() {
     const { res, data } = await api(`/history/${encodeURIComponent(currentNotebook)}`);
     historyList.innerHTML = '';
@@ -503,7 +561,8 @@ async function loadHistoryPanel() {
         const li = document.createElement('li');
         const label = document.createElement('span');
         label.className = 'hist-label';
-        label.textContent = `${formatHistoryId(h.id)}  (${h.size} B)`;
+        label.textContent = `${relativeTime(h.ts)} · ${h.chars} 字`;
+        label.title = formatHistoryId(h.id);
         const del = document.createElement('button');
         del.className = 'hist-del';
         del.type = 'button';
