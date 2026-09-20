@@ -32,11 +32,14 @@ os.makedirs(HISTORY_DIR, exist_ok=True)
 app = Flask(__name__, static_folder=PUBLIC_DIR, static_url_path='')
 app.config['MAX_CONTENT_LENGTH'] = int(os.environ.get('MAX_NOTE_BYTES', str(5 * 1024 * 1024)))
 
-# 放在 nginx / Caddy / Cloudflare 等反向代理后面时设 BEHIND_PROXY=1，
-# 让限速用 X-Forwarded-For 里的真实客户端 IP，而不是代理 IP。
-# 直接暴露公网时不要开，否则客户端可伪造头绕过限速。
-if os.environ.get('BEHIND_PROXY', '0') == '1':
-    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+# 放在反向代理后面时设 BEHIND_PROXY=<代理层数>，让限速拿到真实客户端 IP：
+#   1 = 只有 nginx / Caddy / 1Panel 一层
+#   2 = Cloudflare → nginx/1Panel → 本服务（两层）
+# 有 Cloudflare 时会优先读 CF-Connecting-IP 头，层数填错也没关系。
+# 直接暴露公网时保持 0，否则客户端可伪造头绕过限速。
+PROXY_HOPS = int(os.environ.get('BEHIND_PROXY', '0') or 0)
+if PROXY_HOPS > 0:
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=PROXY_HOPS, x_proto=1, x_host=1)
 
 
 # ---------- helpers ----------
@@ -167,6 +170,10 @@ _auth_lock = threading.Lock()
 
 
 def client_ip():
+    if PROXY_HOPS > 0:
+        cf = request.headers.get('CF-Connecting-IP')
+        if cf:
+            return cf.strip()
     return request.remote_addr or 'unknown'
 
 
@@ -228,6 +235,7 @@ def check_auth():
 
 @app.after_request
 def cache_headers(resp):
+    resp.headers['X-Robots-Tag'] = 'noindex, nofollow'  # 私人笔记，不给搜索引擎收录
     p = request.path
     if p.startswith(('/load/', '/notebooks', '/history/', '/bootstrap')):
         resp.headers['Cache-Control'] = 'no-store'
