@@ -3,6 +3,8 @@ const API_BASE_URL = '';
 
 const AUTOSAVE_DELAY = 800;
 const DRAFT_DELAY = 300; // 本地草稿写入合并间隔
+const SAVE_RETRY_DELAY = 5000; // 保存因网络失败后的重试间隔
+const SAVE_MAX_RETRIES = 3; // 连续失败超过这个次数就等网络恢复，不再定时重试
 const KEEPALIVE_LIMIT = 60 * 1024; // fetch keepalive 的请求体上限约 64KB
 const RESYNC_MIN_INTERVAL = 2000; // 切回页面触发重新同步的最小间隔
 const TOKEN_KEY = 'notepad_token';
@@ -29,6 +31,7 @@ let dirty = false;
 let saving = false;
 let saveQueued = false;
 let saveTimer = null;
+let saveRetries = 0;
 let loadAbort = null;
 let conflictRemote = null;
 
@@ -248,11 +251,16 @@ async function resyncIfIdle() {
     }
 }
 
+// 回到前台 / 网络恢复：有没存上的内容就先补存，否则拉一次最新
+function onPageActive() {
+    if (dirty && !saving) { saveRetries = 0; flushSave(); } else resyncIfIdle();
+}
+
 document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') resyncIfIdle();
+    if (document.visibilityState === 'visible') onPageActive();
 });
-window.addEventListener('focus', resyncIfIdle);
-window.addEventListener('online', resyncIfIdle);
+window.addEventListener('focus', onPageActive);
+window.addEventListener('online', onPageActive);
 
 function markDirty() {
     dirty = true;
@@ -292,6 +300,7 @@ async function autoSave(force = false) {
         }
         currentVersion = data.version;
         $('conflict-banner').hidden = true;
+        saveRetries = 0;
         if (notepad.value === content) {
             dirty = false;
             clearDraft(nb);
@@ -300,12 +309,20 @@ async function autoSave(force = false) {
             saveQueued = true; // 保存期间又改了
         }
     } catch (e) {
-        if (nb === currentNotebook) setStatus('保存出错：' + e.message + '（已存本地草稿）', 'error');
+        if (nb !== currentNotebook) return;
+        // 网络问题：自动重试几次，用完次数就等 online 事件，不无限重试打扰后台
+        saveRetries += 1;
+        if (saveRetries <= SAVE_MAX_RETRIES) {
+            setStatus(`保存失败，${SAVE_RETRY_DELAY / 1000} 秒后重试（已存本地草稿）`, 'error');
+            saveQueued = true;
+        } else {
+            setStatus('保存失败：' + e.message + '（已存本地草稿，网络恢复后自动重试）', 'error');
+        }
     } finally {
         saving = false;
         if (saveQueued) {
             saveQueued = false;
-            scheduleSave(300);
+            scheduleSave(saveRetries ? SAVE_RETRY_DELAY : 300);
         }
     }
 }
